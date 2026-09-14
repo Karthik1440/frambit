@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Frambit Chat Debug</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:20px}
+    h1{color:#818cf8;margin-bottom:4px;font-size:1.4rem}
+    .sub{color:#64748b;font-size:.8rem;margin-bottom:20px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px}
+    h2{font-size:.8rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+    label{display:block;font-size:.72rem;color:#64748b;margin-bottom:3px;margin-top:10px}
+    input,textarea{width:100%;background:#0f172a;border:1px solid #334155;border-radius:7px;padding:8px 10px;color:#e2e8f0;font-size:.82rem;outline:none}
+    textarea{resize:vertical;min-height:60px}
+    .btn{display:block;background:#6366f1;color:#fff;border:none;border-radius:7px;padding:9px 16px;font-size:.82rem;font-weight:700;cursor:pointer;margin-top:12px;width:100%;text-align:center}
+    .btn.g{background:#059669}.btn.r{background:#dc2626}
+    .log{background:#0a0f1a;border:1px solid #1e293b;border-radius:7px;padding:10px;font-family:monospace;font-size:.72rem;max-height:260px;overflow-y:auto;margin-top:10px}
+    .ok{color:#34d399}.err{color:#f87171}.info{color:#60a5fa}.warn{color:#fbbf24}
+    .bar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#1e293b;border:1px solid #334155;border-radius:8px;margin-bottom:16px;font-size:.8rem}
+    .dot{width:8px;height:8px;border-radius:50%;background:#fbbf24;flex-shrink:0}
+    .chat-item{background:#0f172a;border:1px solid #334155;border-radius:7px;padding:9px 11px;margin-bottom:7px;cursor:pointer}
+    .chat-item:hover{border-color:#6366f1}
+    .cid{font-size:.68rem;color:#475569;font-family:monospace}
+    .cem{font-size:.72rem;color:#818cf8;margin-top:2px}
+    .clm{font-size:.78rem;color:#94a3b8;margin-top:3px}
+    .cpt{font-size:.68rem;color:#475569;margin-top:2px;word-break:break-all}
+    .msg{padding:6px 10px;border-radius:6px;margin-bottom:5px}
+    .msg.c{background:#1e3a5f}.msg.s{background:#1e293b;text-align:right}
+    .btn-sm{display:inline-block;background:#6366f1;color:#fff;border:none;border-radius:7px;padding:8px 14px;font-size:.8rem;font-weight:700;cursor:pointer}
+    .btn-sm.r{background:#dc2626}
+  </style>
+</head>
+<body>
+<h1>&#128293; Frambit Chat Debug Tool</h1>
+<p class="sub">Test Firebase Firestore read/write directly to diagnose client to creator message delivery.</p>
+<div class="bar">
+  <div class="dot" id="dot"></div>
+  <span id="fb-status">Connecting to Firebase...</span>
+</div>
+<div class="grid">
+  <div>
+    <div class="card">
+      <h2>&#128228; Send Test Message (Client to Creator)</h2>
+      <label>Client Email (who is sending)</label>
+      <input id="c-email" type="email" placeholder="client@gmail.com"/>
+      <label>Creator Email (exact email creator uses to login to Frambit)</label>
+      <input id="s-email" type="email" placeholder="creator@gmail.com"/>
+      <label>Creator Name</label>
+      <input id="s-name" value="Test Creator"/>
+      <label>Message Text</label>
+      <textarea id="msg">Hi! I want to book a reel shoot session.</textarea>
+      <button class="btn" id="send-btn" onclick="sendMsg()">&#9889; Send Test Message</button>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>&#128065; Check Creator Inbox</h2>
+      <p style="font-size:.78rem;color:#64748b;margin-bottom:8px">Enter the creator email to see what chats they would see.</p>
+      <label>Creator Login Email</label>
+      <input id="check-email" type="email" placeholder="creator@gmail.com"/>
+      <button class="btn g" onclick="checkInbox()">&#10003; Check Inbox</button>
+      <div id="inbox-res" class="log" style="min-height:80px"><span style="color:#475569">Results here...</span></div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h2>&#128225; All Firestore Chats (Live)</h2>
+      <button class="btn-sm" onclick="loadChats()" style="margin-right:8px">&#8635; Refresh</button>
+      <button class="btn-sm r" onclick="clearLS()">&#128465; Clear localStorage</button>
+      <div id="chats-list" style="margin-top:12px">
+        <p style="color:#64748b;font-size:.8rem">Click Refresh to load chats from Firestore...</p>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>&#128203; Activity Log</h2>
+      <div id="log" class="log"><div class="info">Starting...</div></div>
+    </div>
+  </div>
+</div>
+<div class="card" id="msgs-panel" style="margin-top:14px;display:none">
+  <h2>&#128172; Messages in: <span id="msgs-id" style="color:#818cf8;font-family:monospace"></span></h2>
+  <div id="msgs-list" class="log" style="max-height:280px"></div>
+</div>
+
+<script type="module">
+import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, doc, setDoc, addDoc, getDocs, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const cfg = {
+  apiKey: "AIzaSyAQ4KErN03qIVwcSlDZ5-mDxAmtYjKrzc0",
+  authDomain: "frambit-fc825.firebaseapp.com",
+  projectId: "frambit-fc825",
+  storageBucket: "frambit-fc825.firebasestorage.app",
+  messagingSenderId: "881497146713",
+  appId: "1:881497146713:web:a270f17b148b2b82ddf848"
+};
+
+const firebaseApp = getApps().length ? getApp() : initializeApp(cfg);
+const db = getFirestore(firebaseApp);
+
+document.getElementById("dot").style.background = "#34d399";
+document.getElementById("fb-status").textContent = "Firebase connected — Project: frambit-fc825";
+addLog("Firebase ready", "ok");
+
+function getChatId(a, b) {
+  const clean = function(s) { return String(s || "x").replace(/[^a-zA-Z0-9_-]/g, "_"); };
+  const arr = [clean(a), clean(b)].sort();
+  return "chat_" + arr[0] + "_" + arr[1];
+}
+
+function addLog(m, t) {
+  t = t || "info";
+  const box = document.getElementById("log");
+  const d = document.createElement("div");
+  d.className = t;
+  d.textContent = "[" + new Date().toLocaleTimeString() + "] " + m;
+  box.prepend(d);
+}
+
+window.sendMsg = async function() {
+  const ce = document.getElementById("c-email").value.trim();
+  const se = document.getElementById("s-email").value.trim();
+  const sn = document.getElementById("s-name").value.trim() || "Creator";
+  const mt = document.getElementById("msg").value.trim();
+  if (!ce || !se || !mt) { addLog("Please fill in all fields", "err"); return; }
+
+  const chatId = getChatId(ce, se);
+  addLog("Chat ID: " + chatId, "info");
+
+  const participants = [
+    ce.toLowerCase(), se.toLowerCase(),
+    ce.split("@")[0].toLowerCase(),
+    se.split("@")[0].toLowerCase(),
+    sn.toLowerCase().replace(/\s+/g, "_")
+  ].filter(Boolean);
+
+  const now = Date.now();
+  const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const chatMeta = {
+    id: chatId, participants,
+    client_id: ce, client_name: ce.split("@")[0], client_email: ce.toLowerCase(),
+    shooter_id: se, shooter_name: sn, shooter_email: se.toLowerCase(),
+    last_message: mt, last_message_time: timeStr,
+    timestamp: now, unread_count: 1
+  };
+
+  const btn = document.getElementById("send-btn");
+  btn.textContent = "Sending...";
+  btn.style.opacity = "0.6";
+
+  try {
+    const chatDocRef = doc(db, "chats", chatId);
+    await setDoc(chatDocRef, Object.assign({}, chatMeta, {
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp()
+    }), { merge: true });
+    addLog("Chat doc written to Firestore: " + chatId, "ok");
+
+    const msgPayload = {
+      id: "msg_" + now,
+      text: mt,
+      sender_id: ce,
+      sender_name: ce.split("@")[0],
+      sender_role: "client",
+      images: [],
+      time: timeStr,
+      created_at_ms: now,
+      read: false,
+      server_timestamp: serverTimestamp()
+    };
+    await addDoc(collection(db, "chats", chatId, "messages"), msgPayload);
+    addLog("Message written to Firestore successfully!", "ok");
+    addLog("Participants stored: " + participants.join(", "), "info");
+    addLog("shooter_email stored as: " + se.toLowerCase(), "info");
+
+    btn.textContent = "Sent!";
+    btn.style.background = "#059669";
+    btn.style.opacity = "1";
+    setTimeout(function() {
+      btn.textContent = "Send Test Message";
+      btn.style.background = "";
+    }, 2000);
+
+    setTimeout(loadChats, 800);
+  } catch(err) {
+    addLog("WRITE FAILED: " + err.message, "err");
+    addLog("Firestore security rules are probably blocking writes!", "warn");
+    addLog("Fix: Firebase Console > Firestore > Rules > set: allow read, write: if true;", "warn");
+    btn.textContent = "Send Test Message";
+    btn.style.opacity = "1";
+  }
+};
+
+window.loadChats = async function() {
+  addLog("Loading all chats from Firestore...", "info");
+  const container = document.getElementById("chats-list");
+  container.innerHTML = "<p style='color:#64748b;font-size:.8rem'>Loading...</p>";
+  try {
+    const snap = await getDocs(collection(db, "chats"));
+    const chats = [];
+    snap.forEach(function(d) { chats.push(Object.assign({ id: d.id }, d.data())); });
+    chats.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
+
+    if (!chats.length) {
+      container.innerHTML = "<p style='color:#f87171;font-size:.8rem'>No chats in Firestore. This means writes are blocked by Firestore security rules, OR no messages have been sent yet.</p>";
+      addLog("No chats found in Firestore", "warn");
+      return;
+    }
+    container.innerHTML = "";
+    chats.forEach(function(ch) {
+      const item = document.createElement("div");
+      item.className = "chat-item";
+      item.onclick = function() { loadMsgs(ch.id); };
+      item.innerHTML =
+        "<div class='cid'>" + ch.id + "</div>" +
+        "<div class='cem'>Client: <b>" + (ch.client_email || ch.client_id || "?") + "</b> &rarr; Creator: <b>" + (ch.shooter_email || ch.shooter_id || "?") + "</b></div>" +
+        "<div class='clm'>Last: " + (ch.last_message || "-") + "</div>" +
+        "<div class='cpt'>participants: [" + (ch.participants || []).join(", ") + "]</div>";
+      container.appendChild(item);
+    });
+    addLog("Loaded " + chats.length + " chat(s) from Firestore", "ok");
+  } catch(err) {
+    container.innerHTML = "<p style='color:#f87171'>READ FAILED: " + err.message + "</p>";
+    addLog("READ FAILED: " + err.message, "err");
+    addLog("Fix Firestore security rules in Firebase Console", "warn");
+  }
+};
+
+window.loadMsgs = async function(chatId) {
+  document.getElementById("msgs-panel").style.display = "block";
+  document.getElementById("msgs-id").textContent = chatId;
+  const ml = document.getElementById("msgs-list");
+  ml.innerHTML = "Loading messages...";
+  try {
+    const q = query(collection(db, "chats", chatId, "messages"), orderBy("created_at_ms", "asc"));
+    const snap = await getDocs(q);
+    const msgs = [];
+    snap.forEach(function(d) { msgs.push(Object.assign({ id: d.id }, d.data())); });
+    if (!msgs.length) { ml.innerHTML = "<span style='color:#64748b'>No messages in this chat.</span>"; return; }
+    ml.innerHTML = "";
+    msgs.forEach(function(m) {
+      const d = document.createElement("div");
+      const isClient = (m.sender_role || "").toLowerCase() === "client";
+      d.className = "msg " + (isClient ? "c" : "s");
+      d.innerHTML =
+        "<div>" + (m.text || "") + "</div>" +
+        "<div style='font-size:.7rem;color:#64748b;margin-top:2px'>" + (isClient ? "Client" : "Creator") + " &middot; " + (m.sender_name || m.sender_id || "") + " &middot; " + (m.time || "") + "</div>";
+      ml.appendChild(d);
+    });
+    addLog(msgs.length + " message(s) in " + chatId, "ok");
+  } catch(err) {
+    ml.innerHTML = "<span style='color:#f87171'>Error: " + err.message + "</span>";
+    addLog("Error loading messages: " + err.message, "err");
+  }
+};
+
+window.checkInbox = async function() {
+  const email = document.getElementById("check-email").value.trim().toLowerCase();
+  const r = document.getElementById("inbox-res");
+  if (!email) { r.innerHTML = "<span style='color:#f87171'>Enter creator email first</span>"; return; }
+  addLog("Checking inbox for: " + email, "info");
+  r.innerHTML = "Searching Firestore...";
+  try {
+    const snap = await getDocs(collection(db, "chats"));
+    const found = [];
+    snap.forEach(function(d) {
+      const ch = Object.assign({ id: d.id }, d.data());
+      const parts = (ch.participants || []).map(function(p) { return String(p).toLowerCase().trim(); });
+      const match =
+        parts.includes(email) ||
+        String(ch.shooter_email || "").toLowerCase() === email ||
+        String(ch.client_email || "").toLowerCase() === email ||
+        String(ch.shooter_id || "").toLowerCase() === email;
+      if (match) found.push(ch);
+    });
+    if (!found.length) {
+      r.innerHTML =
+        "<div style='color:#f87171;font-weight:700'>No chats found for: " + email + "</div>" +
+        "<div style='color:#64748b;font-size:.72rem;margin-top:6px'>The creator email does not match any chat's shooter_email or participants[].<br>Make sure the client used the creator's exact login email when messaging.</div>";
+      addLog("No inbox chats for: " + email, "err");
+      return;
+    }
+    r.innerHTML = "<div style='color:#34d399;font-weight:700'>" + found.length + " chat(s) found for: " + email + "</div>";
+    found.forEach(function(ch) {
+      const d = document.createElement("div");
+      d.style.cssText = "margin-top:8px;padding:8px;background:#0f172a;border-radius:6px;border:1px solid #1e293b";
+      d.innerHTML =
+        "<div style='color:#818cf8;font-size:.7rem;font-family:monospace'>" + ch.id + "</div>" +
+        "<div style='color:#94a3b8;font-size:.77rem'>From: " + (ch.client_email || ch.client_id || "?") + "</div>" +
+        "<div style='color:#94a3b8;font-size:.77rem'>Last msg: " + (ch.last_message || "-") + "</div>" +
+        "<div style='color:#475569;font-size:.7rem'>participants: [" + (ch.participants || []).join(", ") + "]</div>";
+      r.appendChild(d);
+    });
+    addLog(found.length + " chat(s) for " + email, "ok");
+  } catch(err) {
+    r.innerHTML = "<span style='color:#f87171'>Error: " + err.message + "</span>";
+    addLog("Error: " + err.message, "err");
+  }
+};
+
+window.clearLS = function() {
+  var keys = ["frambit_local_chats"];
+  Object.keys(localStorage).forEach(function(k) { if (k.startsWith("frambit_local_msgs_")) keys.push(k); });
+  keys.forEach(function(k) { localStorage.removeItem(k); });
+  addLog("Cleared " + keys.length + " localStorage key(s)", "warn");
+};
+
+// Auto-load on start
+setTimeout(loadChats, 1200);
+</script>
+</body>
+</html>
