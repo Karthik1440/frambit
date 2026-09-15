@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import axios from 'axios';
-import { Calendar, MessageSquare, Heart, Star, Settings, HelpCircle, ChevronRight, LogOut, Mail, Phone, User as UserIcon, ShieldCheck, Camera, CheckCircle2, Loader2, Film } from 'lucide-react';
+import { Calendar, MessageSquare, Heart, Star, HelpCircle, ChevronRight, LogOut, Mail, Phone, User as UserIcon, ShieldCheck, Camera, CheckCircle2, Loader2, Film } from 'lucide-react';
 import { useAuth, formatNameFromEmail } from '../context/AuthContext';
 import { api } from '../api';
 
@@ -215,14 +215,6 @@ export default function ClientProfileView({ onNavigate }) {
                 )}
               </div>
             </div>
-
-            <button
-              onClick={() => onNavigate('profile_edit')}
-              className="p-2.5 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-2xl transition-all border border-white/15 cursor-pointer"
-              title="Edit Profile"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
           </div>
 
           {/* User Contact Info Chips */}

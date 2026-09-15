@@ -68,6 +68,7 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
   };
 
   const handleStartAdd = () => {
+    if (isReadOnly) return;
     if (items.length >= 6) {
       alert('You have reached the maximum limit of 6 portfolio photos.');
       return;
@@ -77,6 +78,7 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
   };
 
   const handleStartEdit = (item) => {
+    if (isReadOnly) return;
     setShowAddForm(false);
     setEditingId(item.id);
     setTitle(item.title || '');
@@ -86,6 +88,7 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
   };
 
   const handleFileChange = async (e) => {
+    if (isReadOnly) return;
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -106,6 +109,7 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
 
   const handleSaveItem = (e) => {
     e.preventDefault();
+    if (isReadOnly) return;
     if (!title.trim()) return;
     if (!imageDataUrl) {
       alert('Please upload a photo first.');
@@ -141,6 +145,7 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
   };
 
   const handleDeleteItem = (id) => {
+    if (isReadOnly) return;
     const updated = items.filter((item) => item.id !== id);
     setItems(updated);
     if (onUpdateVideos) onUpdateVideos(updated);
@@ -148,6 +153,7 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
   };
 
   const handleSaveAll = () => {
+    if (isReadOnly) return;
     if (onUpdateVideos) onUpdateVideos(items);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
@@ -209,7 +215,7 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
         )}
 
         {/* ── Add / Edit Form ── */}
-        {(showAddForm || editingId) && (
+        {!isReadOnly && (showAddForm || editingId) && (
           <form
             onSubmit={handleSaveItem}
             className="bg-white p-5 sm:p-6 rounded-3xl border border-indigo-200 shadow-md space-y-5"
@@ -422,14 +428,16 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
               </div>
             ))}
 
-            {/* Add More tile */}
-            <div
-              onClick={handleStartAdd}
-              className="aspect-square rounded-2xl border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/40 flex flex-col items-center justify-center cursor-pointer transition-all gap-2 text-slate-400 hover:text-indigo-500"
-            >
-              <Plus className="w-7 h-7" />
-              <span className="text-xs font-bold">Add Photo</span>
-            </div>
+            {/* Add More tile (Creators only) */}
+            {!isReadOnly && (
+              <div
+                onClick={handleStartAdd}
+                className="aspect-square rounded-2xl border-2 border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/40 flex flex-col items-center justify-center cursor-pointer transition-all gap-2 text-slate-400 hover:text-indigo-500"
+              >
+                <Plus className="w-7 h-7" />
+                <span className="text-xs font-bold">Add Photo</span>
+              </div>
+            )}
           </div>
         )}
       </div>

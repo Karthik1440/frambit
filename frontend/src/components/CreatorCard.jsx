@@ -46,8 +46,11 @@ export default function CreatorCard({ shooter, isSaved = false, onToggleSave, on
   const badgeColor = shooter.category_color || CATEGORY_COLOR_MAP[categoryKey] || 'bg-indigo-600';
   const badgeText = shooter.category_label || CATEGORY_BADGE_LABELS[categoryKey] || CATEGORY_LABELS[categoryKey] || 'CREATOR';
   
-  const ratingValue = Number(shooter.rating || 4.8).toFixed(1);
-  const reviewCount = shooter.review_count !== undefined ? shooter.review_count : 85;
+  const ratingNum = Number(shooter.rating || 0);
+  const reviewCount = (shooter.review_count !== undefined && shooter.review_count !== null)
+    ? Number(shooter.review_count)
+    : 0;
+  const ratingValue = ratingNum > 0 ? ratingNum.toFixed(1) : (reviewCount > 0 ? '5.0' : '5.0');
   
   const priceDisplay = shooter.price_formatted || (shooter.hourly_price ? `₹${Math.round(Number(shooter.hourly_price)).toLocaleString('en-IN')}+` : '₹2,500+');
   const priceUnit = shooter.price_unit || (shooter.category === 'video_editor' ? 'per project' : 'per shoot');

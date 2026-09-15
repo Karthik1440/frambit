@@ -142,6 +142,9 @@ function MainApp() {
         const formatted = backendBookings.map((b) => ({
           id: b.id.toString().startsWith('BK-') ? b.id : `BK-${b.id}`,
           rawId: b.id,
+          shooter: b.shooter,
+          shooter_id: b.shooter,
+          shooterId: b.shooter,
           service: b.notes || 'Reel Shoot',
           title: b.notes || 'Reel Shoot',
           amount: b.estimated_amount ? `₹${Number(b.estimated_amount).toLocaleString('en-IN')}` : '₹4,999',
@@ -1045,7 +1048,10 @@ function MainApp() {
             key={`portfolio-${currentShooterForView?.id || 'active'}-${(currentShooterForView?.portfolio || []).length}`}
             videos={currentShooterForView?.portfolio || []}
             shooter={currentShooterForView}
-            isReadOnly={userRole !== 'creator'}
+            isReadOnly={
+              userRole !== 'creator' ||
+              (Boolean(userData?.email) && Boolean(currentShooterForView?.email) && userData.email.toLowerCase() !== currentShooterForView.email.toLowerCase() && String(currentShooterForView?.id) !== String(activeCreator?.id))
+            }
             onUpdateVideos={handleUpdatePortfolio}
             onNavigate={(screen) => setCurrentScreen(screen)}
           />
@@ -1112,10 +1118,10 @@ function MainApp() {
             shooter={
               selectedBooking
                 ? {
-                    id: selectedBooking.shooter_id,
-                    display_name: selectedBooking.shooter_name,
-                    name: selectedBooking.shooter_name,
-                    avatar: selectedBooking.shooter_avatar,
+                    id: selectedBooking.shooter_id || selectedBooking.shooter || selectedBooking.shooterId || selectedShooter?.id,
+                    display_name: selectedBooking.shooter_name || selectedShooter?.display_name || 'Creator',
+                    name: selectedBooking.shooter_name || selectedShooter?.name || 'Creator',
+                    avatar: selectedBooking.shooter_avatar || selectedShooter?.avatar,
                     service: selectedBooking.service || selectedBooking.title,
                   }
                 : selectedShooter
@@ -1124,21 +1130,21 @@ function MainApp() {
             userRole={userRole}
             onNavigate={(screen) => setCurrentScreen(screen)}
             onSubmitReview={(bookingId, reviewData) => {
-              const targetShooterId = reviewData.shooter || reviewData.shooter_id || selectedBooking?.shooter_id || selectedShooter?.id;
+              const targetShooterId = reviewData.shooter_id || reviewData.shooter || selectedBooking?.shooter_id || selectedBooking?.shooter || selectedShooter?.id;
               const newReviewItem = {
-                id: `rev-${Date.now()}`,
+                id: reviewData.id || `rev-${Date.now()}`,
                 booking: bookingId,
                 shooter: targetShooterId,
                 shooter_id: targetShooterId,
-                customer_name: reviewData.customer_name || userData?.display_name || userData?.name || 'Karthik',
+                customer_name: reviewData.customer_name || userData?.display_name || userData?.name || 'Client',
                 customer_avatar: reviewData.customer_avatar || userData?.avatar || null,
                 rating: Number(reviewData.rating) || 5,
                 comment: reviewData.comment || 'Great shoot experience and professional reel delivery!',
-                created_at: new Date().toISOString(),
+                created_at: reviewData.created_at || new Date().toISOString(),
               };
 
               // Immediately prepend to reviews state
-              setReviews((prev) => [newReviewItem, ...prev.filter((r) => r.id !== newReviewItem.id)]);
+              setReviews((prev) => [newReviewItem, ...prev.filter((r) => String(r.id) !== String(newReviewItem.id))]);
 
               // Update booking status with is_reviewed and reviewData
               if (bookingId) {
@@ -1154,9 +1160,11 @@ function MainApp() {
                   prev.map((s) => {
                     if (String(s.id) === String(targetShooterId)) {
                       const curCount = Number(s.review_count || 0);
-                      const curRating = Number(s.rating || 5.0);
+                      const curRating = Number(s.rating || 0);
                       const newCount = curCount + 1;
-                      const newRating = Number(((curRating * curCount + Number(reviewData.rating || 5)) / newCount).toFixed(1));
+                      const newRating = curCount === 0
+                        ? Number(reviewData.rating || 5).toFixed(1)
+                        : Number(((curRating * curCount + Number(reviewData.rating || 5)) / newCount).toFixed(1));
                       return { ...s, rating: newRating, review_count: newCount };
                     }
                     return s;
@@ -1166,12 +1174,35 @@ function MainApp() {
                 setSelectedShooter((prev) => {
                   if (!prev || (String(prev.id) !== String(targetShooterId))) return prev;
                   const curCount = Number(prev.review_count || 0);
-                  const curRating = Number(prev.rating || 5.0);
+                  const curRating = Number(prev.rating || 0);
                   const newCount = curCount + 1;
-                  const newRating = Number(((curRating * curCount + Number(reviewData.rating || 5)) / newCount).toFixed(1));
+                  const newRating = curCount === 0
+                    ? Number(reviewData.rating || 5).toFixed(1)
+                    : Number(((curRating * curCount + Number(reviewData.rating || 5)) / newCount).toFixed(1));
                   return { ...prev, rating: newRating, review_count: newCount };
                 });
               }
+
+              // Refresh shooters and reviews from backend to ensure persistent source-of-truth sync
+              fetchShooters().then((backendShooters) => {
+                if (Array.isArray(backendShooters) && backendShooters.length > 0) {
+                  setShooters((prev) => {
+                    const map = new Map();
+                    backendShooters.forEach((s) => map.set(String(s.id), s));
+                    return Array.from(map.values());
+                  });
+                }
+              });
+              fetchReviewsApi().then((apiReviews) => {
+                if (Array.isArray(apiReviews) && apiReviews.length > 0) {
+                  setReviews((prev) => {
+                    const map = new Map();
+                    prev.forEach((r) => map.set(String(r.id), r));
+                    apiReviews.forEach((r) => map.set(String(r.id), r));
+                    return Array.from(map.values());
+                  });
+                }
+              });
             }}
           />
         )}

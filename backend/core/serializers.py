@@ -298,6 +298,8 @@ class BookingSerializer(serializers.ModelSerializer):
 class ReviewSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
     customer_avatar = serializers.SerializerMethodField()
+    shooter_id = serializers.IntegerField(source="shooter.id", read_only=True)
+    booking_id = serializers.IntegerField(source="booking.id", read_only=True)
 
     def get_customer_name(self, obj):
         if obj.customer and obj.customer.user:
@@ -317,10 +319,12 @@ class ReviewSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "booking",
+            "booking_id",
             "customer",
             "customer_name",
             "customer_avatar",
             "shooter",
+            "shooter_id",
             "rating",
             "comment",
             "created_at",

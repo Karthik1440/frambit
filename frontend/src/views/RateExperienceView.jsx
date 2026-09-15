@@ -56,27 +56,38 @@ export default function RateExperienceView({
     const clientName = userData?.display_name || userData?.name || booking?.client_name || 'Karthik';
     const clientAvatar = userData?.avatar || booking?.customer_avatar || null;
 
+    const rawBookingId = booking?.rawId || booking?.id;
+    const cleanBookingId = rawBookingId
+      ? (typeof rawBookingId === 'number' ? rawBookingId : parseInt(String(rawBookingId).replace(/^BK-/, ''), 10) || rawBookingId)
+      : null;
+
+    const rawShooterId = shooter?.id || booking?.shooter_id || booking?.shooterId || booking?.shooter;
+    const cleanShooterId = rawShooterId
+      ? (typeof rawShooterId === 'number' ? rawShooterId : parseInt(String(rawShooterId).replace(/^creator-/, ''), 10) || rawShooterId)
+      : null;
+
     const reviewData = {
       rating: Number(rating),
       comment: comment.trim() || 'Great shoot experience and high-quality reel delivery!',
-      booking: booking?.rawId || booking?.id,
-      booking_id: booking?.rawId || booking?.id,
-      shooter: shooter?.id || booking?.shooter_id,
-      shooter_id: shooter?.id || booking?.shooter_id,
+      booking: cleanBookingId,
+      booking_id: cleanBookingId,
+      shooter: cleanShooterId,
+      shooter_id: cleanShooterId,
       customer_name: clientName,
       customer_avatar: clientAvatar,
       client_email: userData?.email || currentUser?.email || 'karthik@frambit.com',
       created_at: new Date().toISOString(),
     };
 
+    let backendResult = null;
     try {
-      await submitReviewApi(reviewData);
+      backendResult = await submitReviewApi(reviewData);
     } catch (err) {
       console.warn('Backend review submit fallback:', err);
     }
 
     if (onSubmitReview) {
-      onSubmitReview(booking?.id, reviewData);
+      onSubmitReview(booking?.id || cleanBookingId, backendResult || reviewData);
     }
 
     setIsSubmitting(false);

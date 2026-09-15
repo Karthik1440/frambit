@@ -157,12 +157,12 @@ export default function HomeView({
   };
 
   const topRatedCreators = useMemo(() => {
-    const liveList = Array.isArray(shooters) ? shooters : [];
+    const liveList = Array.isArray(shooters) ? [...shooters] : [];
 
     if (creatorFilter === 'nearest') {
       liveList.sort((a, b) => getShooterDistance(a) - getShooterDistance(b));
     } else {
-      liveList.sort((a, b) => (b.rating || 4.8) - (a.rating || 4.8));
+      liveList.sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
     }
 
     return liveList.slice(0, 8);

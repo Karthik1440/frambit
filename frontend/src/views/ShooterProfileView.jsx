@@ -45,13 +45,11 @@ export default function ShooterProfileView({
       });
       // Also fetch reviews for this creator from backend API
       fetchReviewsApi(shooterProp.id).then((apiReviews) => {
-        if (Array.isArray(apiReviews) && apiReviews.length > 0) {
+        if (Array.isArray(apiReviews)) {
           setReviews((prev) => {
             const map = new Map();
             prev.forEach((r) => map.set(String(r.id), r));
-            apiReviews.forEach((r) => {
-              if (!map.has(String(r.id))) map.set(String(r.id), r);
-            });
+            apiReviews.forEach((r) => map.set(String(r.id), r));
             return Array.from(map.values());
           });
         }
@@ -63,10 +61,8 @@ export default function ShooterProfileView({
     if (Array.isArray(reviewsProp) && reviewsProp.length > 0) {
       setReviews((prev) => {
         const map = new Map();
+        prev.forEach((r) => map.set(String(r.id), r));
         reviewsProp.forEach((r) => map.set(String(r.id), r));
-        prev.forEach((r) => {
-          if (!map.has(String(r.id))) map.set(String(r.id), r);
-        });
         return Array.from(map.values());
       });
     }
@@ -122,7 +118,7 @@ export default function ShooterProfileView({
     if (rShooterId && currentShooterId) {
       return rShooterId === currentShooterId;
     }
-    return true;
+    return false;
   });
 
   // Calculate live average rating and review count in real-time
@@ -132,7 +128,7 @@ export default function ShooterProfileView({
 
   const liveRating = creatorReviews.length > 0
     ? (creatorReviews.reduce((sum, r) => sum + Number(r.rating || 5), 0) / creatorReviews.length).toFixed(1)
-    : (shooter.rating ? Number(shooter.rating).toFixed(1) : '5.0');
+    : (shooter.rating && Number(shooter.rating) > 0 ? Number(shooter.rating).toFixed(1) : '5.0');
 
   // Star breakdown (5 down to 1)
   const starBreakdown = [5, 4, 3, 2, 1].map((star) => {
