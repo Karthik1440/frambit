@@ -1,8 +1,19 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Bell, Calendar, Check, X, CheckCircle, MessageSquare, Upload, ArrowRight, Clock, Trash2, Star } from 'lucide-react';
-import { MOCK_BOOKINGS, matchesBookingId } from '../api';
+import { ArrowLeft, Bell, Calendar, Check, X, CheckCircle, MessageSquare, Upload, ArrowRight, Clock, Trash2, Star, FileText, Phone, MapPin, Copy, ExternalLink } from 'lucide-react';
+import { matchesBookingId } from '../api';
 
-export default function MyBookingsView({ onNavigate, bookings = MOCK_BOOKINGS, onSelectBooking, onUpdateStatus, userRole = 'client', onDeleteBooking, onClearBookings, onStartChat }) {
+export default function MyBookingsView({ onNavigate, bookings = [], onSelectBooking, onUpdateStatus, userRole = 'client', onDeleteBooking, onClearBookings, onStartChat }) {
+  const [detailsBooking, setDetailsBooking] = useState(null);
+  const [copiedPhone, setCopiedPhone] = useState(false);
+
+  const handleCopyPhone = (number) => {
+    if (!number) return;
+    try {
+      navigator.clipboard.writeText(number);
+      setCopiedPhone(true);
+      setTimeout(() => setCopiedPhone(false), 2000);
+    } catch (e) {}
+  };
   const [bookingsList, setBookingsList] = useState(() => {
     try {
       const stored = localStorage.getItem('frambit_bookings');
@@ -135,16 +146,16 @@ export default function MyBookingsView({ onNavigate, bookings = MOCK_BOOKINGS, o
             {bookingsList.map((item) => (
               <div
                 key={item.id}
-                onClick={() => (onSelectBooking ? onSelectBooking(item) : onNavigate('booking_status'))}
+                onClick={() => setDetailsBooking(item)}
                 className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
               >
-                <div className="flex items-center gap-4 min-w-0">
+                <div className="flex items-start sm:items-center gap-4 min-w-0">
                   <img
-                    src={(userRole === 'creator' ? item.client_avatar : item.shooter_avatar) || item.shooter_avatar || 'https://ik.imagekit.io/reelshooter/profile_pictures/default_creator_avatar.jpg'}
+                    src={(userRole === 'creator' ? item.client_avatar : item.shooter_avatar) || item.shooter_avatar || null}
                     alt={userRole === 'creator' ? (item.client_name || 'Client') : (item.shooter_name || 'Creator')}
-                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover shrink-0 shadow-2xs border border-slate-200/60"
+                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover shrink-0 shadow-2xs border border-slate-200/60 mt-0.5 sm:mt-0"
                   />
-                  <div className="min-w-0 space-y-1">
+                  <div className="min-w-0 space-y-1.5 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm sm:text-base font-black text-slate-900 truncate">
                         {item.service || 'Reel Shoot'}
@@ -158,12 +169,40 @@ export default function MyBookingsView({ onNavigate, bookings = MOCK_BOOKINGS, o
                     <p className="text-xs text-slate-700 font-bold truncate">
                       {userRole === 'creator' ? `Client: ${item.client_name || 'Client'}` : `Creator: ${item.shooter_name || 'Creator'}`}
                     </p>
-                    <p className="text-xs text-slate-500 font-medium truncate">
-                      {item.date} • {item.time}
-                    </p>
-                    <p className="text-[11px] text-slate-400 font-medium truncate">
-                      📍 {item.location}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-500 font-medium">
+                      <span>{item.date} • {item.time}</span>
+                      <span className="text-slate-400">📍 {item.location}</span>
+                    </div>
+
+                    {/* Quick phone preview on card */}
+                    {item.phone_number && (
+                      <p className="text-xs text-emerald-700 font-bold flex items-center gap-1.5 bg-emerald-50/70 px-2.5 py-0.5 rounded-lg border border-emerald-100/80 w-fit">
+                        <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+                        <span>{item.phone_number}</span>
+                      </p>
+                    )}
+
+                    {/* Quick requirements preview on card */}
+                    {item.requirements && (
+                      <p className="text-[11px] text-slate-600 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200/60 line-clamp-1 max-w-md">
+                        <span className="font-bold text-slate-700">Requirement: </span>
+                        <span>{item.requirements}</span>
+                      </p>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailsBooking(item);
+                      }}
+                      className="text-xs font-extrabold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1 cursor-pointer pt-0.5"
+                      title="View Booking Details (Number, Location, Brief)"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>View Details</span>
+                      <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                    </button>
                   </div>
                 </div>
 
@@ -278,6 +317,197 @@ export default function MyBookingsView({ onNavigate, bookings = MOCK_BOOKINGS, o
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Shoot Details Modal (Number, Location, Requirements, Time) */}
+        {detailsBooking && (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+            onClick={() => setDetailsBooking(null)}
+          >
+            <div
+              className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-scale-in"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">Shoot Details</h3>
+                    <p className="text-[11px] font-bold text-slate-400">
+                      ID: {detailsBooking.id} • <span className="capitalize text-indigo-600 font-extrabold">{detailsBooking.status || 'Confirmed'}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDetailsBooking(null)}
+                  className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 overflow-y-auto space-y-4 text-xs">
+                {/* Service & Client summary */}
+                <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+                  <img
+                    src={(userRole === 'creator' ? detailsBooking.client_avatar : detailsBooking.shooter_avatar) || detailsBooking.shooter_avatar || null}
+                    alt={userRole === 'creator' ? (detailsBooking.client_name || 'Client') : (detailsBooking.shooter_name || 'Creator')}
+                    className="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-black text-slate-900 truncate">{detailsBooking.service || 'Reel Shoot'}</h4>
+                      {detailsBooking.amount && (
+                        <span className="text-xs font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">
+                          {detailsBooking.amount}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-700 font-bold truncate mt-0.5">
+                      {userRole === 'creator' ? `Client: ${detailsBooking.client_name || 'Client'}` : `Creator: ${detailsBooking.shooter_name || 'Creator'}`}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 1. Phone Number */}
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                    Contact Phone Number
+                  </span>
+                  {detailsBooking.phone_number ? (
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <span className="text-sm font-black text-slate-900 tracking-wide font-mono">
+                        {detailsBooking.phone_number}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyPhone(detailsBooking.phone_number)}
+                          className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                          title="Copy number"
+                        >
+                          {copiedPhone ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedPhone ? 'Copied' : 'Copy'}</span>
+                        </button>
+                        <a
+                          href={`tel:${detailsBooking.phone_number}`}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span>Call</span>
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 font-medium italic">No contact number provided for this booking.</p>
+                  )}
+                </div>
+
+                {/* 2. Location */}
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                    Shoot Location
+                  </span>
+                  <div className="flex items-start justify-between gap-2 pt-0.5">
+                    <p className="text-xs font-bold text-slate-800 leading-relaxed">
+                      {detailsBooking.location || 'Location to be decided'}
+                    </p>
+                    {detailsBooking.location && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(detailsBooking.location)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl border border-rose-100 transition-all flex items-center gap-1"
+                        title="View on Google Maps"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Maps</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Requirements & Shoot Brief */}
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                    Shoot Requirements & Brief
+                  </span>
+                  {detailsBooking.requirements ? (
+                    <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 text-xs text-slate-800 font-medium leading-relaxed whitespace-pre-line">
+                      {detailsBooking.requirements}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 font-medium italic">No specific shoot brief or requirements provided.</p>
+                  )}
+                </div>
+
+                {/* 4. Date & Time */}
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-amber-500" />
+                    Date & Time Slot
+                  </span>
+                  <p className="text-xs font-extrabold text-slate-800">
+                    {detailsBooking.date || 'TBD'} • {detailsBooking.time || 'Flexible'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const b = detailsBooking;
+                    setDetailsBooking(null);
+                    if (onSelectBooking) onSelectBooking(b);
+                    else onNavigate('booking_status');
+                  }}
+                  className="text-[11px] font-bold text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer"
+                >
+                  Status Timeline →
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const b = detailsBooking;
+                      setDetailsBooking(null);
+                      if (onStartChat) {
+                        const target = userRole === 'creator'
+                          ? { id: b.client_id || b.user_id || 'client', name: b.client_name || 'Client', avatar: b.client_avatar }
+                          : { id: b.shooter_id || b.shooterId || 'creator', name: b.shooter_name || 'Creator', avatar: b.shooter_avatar };
+                        onStartChat(target, b);
+                      } else {
+                        onNavigate('chat_conversation');
+                      }
+                    }}
+                    className="px-4 py-2 bg-frambit-gradient text-white font-extrabold text-xs rounded-xl shadow-xs hover:opacity-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Chat</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDetailsBooking(null)}
+                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

@@ -170,7 +170,7 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
 
   const name = userData?.display_name || userData?.name || shooter?.display_name || shooter?.name || currentUser?.displayName || 'Karthik';
   const roleTitle = 'Videographer';
-  const avatar = userData?.avatar || shooter?.avatar || currentUser?.photoURL || 'https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg';
+  const avatar = userData?.avatar || shooter?.avatar || currentUser?.photoURL || null;
 
   const handleLogout = async () => {
     await logout();
@@ -354,7 +354,7 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
                 <div className="w-40 h-28 sm:w-48 sm:h-32 bg-indigo-100/70 rounded-full flex items-center justify-center relative">
                   <div className="w-24 h-24 rounded-full bg-indigo-200/60 absolute -top-2 -right-2" />
                   <img
-                    src="https://ik.imagekit.io/demo/tr:w-400,h-400,fo-face/default-image.jpg"
+                    src={userData?.avatar || shooter?.avatar || currentUser?.photoURL || null}
                     alt="Photographer Vector Illustration"
                     className="w-28 h-28 object-cover rounded-2xl shadow-md border-2 border-white transform -rotate-3"
                   />
@@ -428,7 +428,7 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
                           >
                             <div className="flex items-center gap-3.5 min-w-0">
                               <img
-                                src={b.image || b.shooter_avatar || 'https://ik.imagekit.io/reelshooter/profile_pictures/default_creator_avatar.jpg'}
+                                src={b.image || b.shooter_avatar || null}
                                 alt={b.title || b.service}
                                 className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover shrink-0 border border-slate-200 shadow-2xs"
                               />
@@ -511,7 +511,7 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
                           >
                             <div className="flex items-center gap-3.5 min-w-0">
                               <img
-                                src={b.image || b.shooter_avatar || 'https://ik.imagekit.io/reelshooter/profile_pictures/default_creator_avatar.jpg'}
+                                src={b.image || b.shooter_avatar || null}
                                 alt={b.title}
                                 className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl object-cover shrink-0 border border-slate-200 shadow-2xs"
                               />
@@ -590,7 +590,7 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
                           >
                             <div className="flex items-center gap-3.5 min-w-0">
                               <img
-                                src={b.image || b.shooter_avatar || 'https://ik.imagekit.io/reelshooter/profile_pictures/default_creator_avatar.jpg'}
+                                src={b.image || b.shooter_avatar || null}
                                 alt={b.title || b.service}
                                 className="w-12 h-12 rounded-2xl object-cover shrink-0 border border-slate-200 shadow-2xs"
                               />
@@ -663,7 +663,7 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
                     >
                       <div className="relative h-32 sm:h-36 w-full bg-slate-900 overflow-hidden">
                         <img
-                          src={pkg.cover_image || shooter?.cover_image || 'https://ik.imagekit.io/demo/tr:w-600,h-400/img/plant.jpeg'}
+                          src={pkg.cover_image || shooter?.cover_image || null}
                           alt={pkg.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />

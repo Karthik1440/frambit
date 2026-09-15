@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import axios from 'axios';
 import { Calendar, MessageSquare, Heart, Star, Settings, HelpCircle, ChevronRight, LogOut, Mail, Phone, User as UserIcon, ShieldCheck, Camera, CheckCircle2, Loader2, Film } from 'lucide-react';
 import { useAuth, formatNameFromEmail } from '../context/AuthContext';
-import { MOCK_CLIENT_PROFILE, api } from '../api';
+import { api } from '../api';
 
 export default function ClientProfileView({ onNavigate }) {
   const { currentUser, userData, setUserData, userRole, logout } = useAuth();

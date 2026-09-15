@@ -165,12 +165,12 @@ class BookingSerializer(serializers.ModelSerializer):
     def get_customer_avatar(self, obj):
         if obj.customer and getattr(obj.customer, 'profile_image', None):
             return obj.customer.profile_image
-        return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200"
+        return None
 
     def get_shooter_avatar(self, obj):
         if obj.shooter and obj.shooter.user and obj.shooter.user.profile_image:
             return obj.shooter.user.profile_image
-        return "https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg"
+        return None
 
     def to_internal_value(self, data):
         if hasattr(data, "dict"):
@@ -249,6 +249,12 @@ class BookingSerializer(serializers.ModelSerializer):
         if not data.get("location"):
             data["location"] = "Bengaluru, Karnataka"
 
+        # 6. Pass through phone_number and requirements
+        if "phone_number" not in data:
+            data["phone_number"] = ""
+        if "requirements" not in data:
+            data["requirements"] = ""
+
         return super().to_internal_value(data)
 
     class Meta:
@@ -266,6 +272,8 @@ class BookingSerializer(serializers.ModelSerializer):
             "duration_minutes",
             "location",
             "notes",
+            "phone_number",
+            "requirements",
             "estimated_amount",
             "status",
             "created_at",
@@ -302,7 +310,7 @@ class ReviewSerializer(serializers.ModelSerializer):
     def get_customer_avatar(self, obj):
         if obj.customer and getattr(obj.customer, 'profile_image', None):
             return obj.customer.profile_image
-        return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200"
+        return None
 
     class Meta:
         model = Review
@@ -352,7 +360,7 @@ class PromotionalBannerSerializer(serializers.ModelSerializer):
                 return obj.image.url
             except Exception:
                 pass
-        return obj.image_url or "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&q=80&w=1600"
+        return obj.image_url or None
 
     class Meta:
         model = PromotionalBanner

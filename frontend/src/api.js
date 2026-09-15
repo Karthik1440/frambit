@@ -29,39 +29,7 @@ export const matchesBookingId = (booking, targetId) => {
   return Boolean(cleanBookingId && cleanBookingId === cleanTargetId);
 };
 
-let storedCreatorName = 'Karthik';
-let storedCreatorAvatar = 'https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg';
-try {
-  const activeProf = localStorage.getItem('frambit_active_creator_profile');
-  const storedAv = localStorage.getItem('frambit_active_avatar');
-  if (storedAv && !storedAv.includes('photo-1500648767791')) {
-    storedCreatorAvatar = storedAv;
-  } else if (activeProf) {
-    const parsed = JSON.parse(activeProf);
-    if (parsed.display_name || parsed.name) storedCreatorName = parsed.display_name || parsed.name;
-    if (parsed.avatar && !parsed.avatar.includes('photo-1500648767791')) {
-      storedCreatorAvatar = parsed.avatar;
-    }
-  }
-} catch (e) {}
-if (storedCreatorName === 'Karthik P') storedCreatorName = 'Karthik';
 
-// Production Data Arrays (Loaded dynamically from Django REST API database)
-export const MOCK_SHOOTERS = [];
-export const MOCK_PORTFOLIO_IMAGES = [];
-export const MOCK_PORTFOLIO_VIDEOS = [];
-export const MOCK_BOOKINGS = [];
-export const MOCK_REVIEWS = [];
-export const MOCK_CHATS = [];
-
-export const MOCK_CLIENT_PROFILE = {
-  name: 'Guest User',
-  role: 'Client',
-  email: 'guest@frambit.com',
-  phone: 'Not signed in',
-  city: 'Bengaluru',
-  avatar: '',
-};
 
 export const PLATFORM_CATEGORIES = [
   { id: 'reel_shooter', label: 'Reel Shooter', iconEmoji: '📹', title: 'Reel Shooter & Videographer' },

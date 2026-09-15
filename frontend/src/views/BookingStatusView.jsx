@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, CheckCircle2, MessageSquare, MoreVertical, Clock, XCircle, X, Check, Calendar, AlertCircle, Star, Upload } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, MessageSquare, MoreVertical, Clock, XCircle, X, Check, Calendar, AlertCircle, Star, Upload, Phone, FileText } from 'lucide-react';
 
 export default function BookingStatusView({
   booking,
@@ -8,19 +8,34 @@ export default function BookingStatusView({
   onUpdateStatus,
   userRole = 'client',
 }) {
-  const currentBooking = booking || {
-    id: `BK-${Date.now().toString().slice(-4)}`,
-    shooter_name: 'Creator',
-    shooter_avatar: 'https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg',
-    service: 'Reel Shoot',
-    date: '20 Sep 2026',
-    time: '4:00 PM - 6:00 PM',
-    location: 'Bengaluru, Karnataka',
-    status: 'Pending',
-    requested_at: 'Just now',
-    accepted_at: null,
-    declined_at: null,
-  };
+  const currentBooking = booking || (() => {
+    try {
+      const saved = localStorage.getItem('frambit_active_booking');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return null;
+  })();
+
+  if (!currentBooking) {
+    return (
+      <div className="min-h-screen bg-frambit-light pb-24 text-slate-800 animate-fade-in relative flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl p-6 text-center border border-slate-200/80 shadow-frambit-card space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900">No Booking Selected</h2>
+          <p className="text-xs text-slate-500 font-medium">Please select a booking from My Bookings to view its details.</p>
+          <button
+            onClick={() => onNavigate('my_bookings')}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Go to My Bookings</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const rawStatus = (currentBooking.status || 'Pending').toLowerCase();
   const isConfirmed = rawStatus === 'confirmed' || rawStatus === 'accepted';
@@ -84,8 +99,8 @@ export default function BookingStatusView({
           <div className="flex items-center gap-3">
             <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200/60">
               <img
-                src={currentBooking.shooter_avatar || 'https://ik.imagekit.io/reelshooter/profile_pictures/default_creator_avatar.jpg'}
-                alt={currentBooking.shooter_name}
+                src={(userRole === 'creator' ? (currentBooking.client_avatar || currentBooking.shooter_avatar) : currentBooking.shooter_avatar) || null}
+                alt={userRole === 'creator' ? (currentBooking.client_name || 'Client') : (currentBooking.shooter_name || 'Creator')}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -94,10 +109,17 @@ export default function BookingStatusView({
                 {currentBooking.service || currentBooking.title || 'Reel Shoot'}
               </h3>
               <p className="text-xs text-slate-500 font-semibold truncate">
-                {currentBooking.shooter_name ? `with ${currentBooking.shooter_name}` : ''}
+                {userRole === 'creator'
+                  ? (currentBooking.client_name ? `Client: ${currentBooking.client_name}` : 'Client')
+                  : (currentBooking.shooter_name ? `with ${currentBooking.shooter_name}` : '')}
               </p>
               <p className="text-xs text-slate-500 font-semibold">{currentBooking.date} • {currentBooking.time}</p>
               <p className="text-[11px] text-slate-400 font-medium truncate">{currentBooking.location}</p>
+              {currentBooking.phone_number && (
+                <p className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                  <Phone className="w-3 h-3" /> {currentBooking.phone_number}
+                </p>
+              )}
             </div>
           </div>
 
@@ -105,14 +127,52 @@ export default function BookingStatusView({
             <span className="text-xs font-black text-slate-700">
               {currentBooking.amount || '₹799/hr'}
             </span>
-            <button
-              onClick={() => onNavigate('shooter_profile')}
-              className="text-xs font-extrabold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3.5 py-1.5 rounded-xl border border-indigo-100 transition-all"
-            >
-              View Details
-            </button>
+            {userRole !== 'creator' ? (
+              <button
+                onClick={() => onNavigate('shooter_profile')}
+                className="text-xs font-extrabold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3.5 py-1.5 rounded-xl border border-indigo-100 transition-all cursor-pointer"
+              >
+                View Details
+              </button>
+            ) : (
+              <button
+                onClick={() => onNavigate('my_bookings')}
+                className="text-xs font-extrabold text-slate-600 hover:text-slate-800 bg-slate-100 px-3.5 py-1.5 rounded-xl border border-slate-200 transition-all cursor-pointer"
+              >
+                All Bookings
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Shoot Brief / Requirements (Phone Number & Requirements first) */}
+        {(currentBooking.requirements || currentBooking.phone_number) && (
+          <div className="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-frambit-card space-y-3">
+            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-indigo-500" />
+              Shoot Brief & Requirements
+            </h3>
+            {currentBooking.phone_number && (
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50/50 border border-emerald-100">
+                <div className="flex items-center gap-2 text-xs text-slate-800 font-bold">
+                  <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>{currentBooking.phone_number}</span>
+                </div>
+                <a
+                  href={`tel:${currentBooking.phone_number}`}
+                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-lg shadow-2xs"
+                >
+                  Call
+                </a>
+              </div>
+            )}
+            {currentBooking.requirements && (
+              <div className="p-3 rounded-2xl bg-indigo-50/50 border border-indigo-100 text-xs text-slate-700 font-medium leading-relaxed whitespace-pre-line">
+                {currentBooking.requirements}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Dynamic Status Alert Banner */}
         {isPending && (
@@ -387,6 +447,8 @@ export default function BookingStatusView({
           </div>
         )}
 
+
+
         {/* Bottom Action Buttons */}
         <div className="flex items-center gap-3 pt-2">
           {isDeclined || isCancelled ? (
@@ -448,10 +510,10 @@ export default function BookingStatusView({
               </button>
               <button
                 onClick={() => onOpenChat && onOpenChat()}
-                className="flex-1 py-3 px-4 bg-frambit-gradient text-white font-extrabold text-xs rounded-2xl shadow-frambit hover:opacity-95 transition-all text-center flex items-center justify-center gap-1.5"
+                className="flex-1 py-3 px-4 bg-frambit-gradient text-white font-extrabold text-xs rounded-2xl shadow-frambit hover:opacity-95 transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <MessageSquare className="w-4 h-4 fill-white" />
-                <span>Chat with Creator</span>
+                <span>{userRole === 'creator' ? 'Chat with Client' : 'Chat with Creator'}</span>
               </button>
             </>
           )}

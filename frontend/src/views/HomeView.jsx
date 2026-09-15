@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, MapPin, Video, Camera, Scissors, Sparkles, Shirt, Radio, UserCheck, Star, Grid, Heart, ChevronDown, Check, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { POPULAR_CITIES, PLATFORM_CATEGORIES, CATEGORY_LABELS, fetchCategories, fetchBanners } from '../api';
 import CreatorCard from '../components/CreatorCard';
-import { FEATURED_TOP_CREATORS } from '../data/featuredCreators';
+
 
 const ICON_MAP = {
   reel_shooter: Video,
@@ -78,7 +78,7 @@ export default function HomeView({
       button_text: 'Book Now',
       button_action: 'search',
       category_slug: 'reel_shooter',
-      image_display_url: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&q=80&w=1600',
+      image_display_url: null,
     }];
   }, [banners]);
 
@@ -156,26 +156,16 @@ export default function HomeView({
     return Number((1.2 + (seed * 0.7)).toFixed(1));
   };
 
-  // Blend live shooters from backend with featured creators to ensure rich 8-card showcase
   const topRatedCreators = useMemo(() => {
     const liveList = Array.isArray(shooters) ? shooters : [];
-    const combined = [...liveList];
-    const existingIds = new Set(liveList.map((s) => String(s.id)));
-    const existingNames = new Set(liveList.map((s) => (s.display_name || s.name || '').toLowerCase()));
-
-    for (const feat of FEATURED_TOP_CREATORS) {
-      if (!existingIds.has(String(feat.id)) && !existingNames.has((feat.display_name || '').toLowerCase())) {
-        combined.push(feat);
-      }
-    }
 
     if (creatorFilter === 'nearest') {
-      combined.sort((a, b) => getShooterDistance(a) - getShooterDistance(b));
+      liveList.sort((a, b) => getShooterDistance(a) - getShooterDistance(b));
     } else {
-      combined.sort((a, b) => (b.rating || 4.8) - (a.rating || 4.8));
+      liveList.sort((a, b) => (b.rating || 4.8) - (a.rating || 4.8));
     }
 
-    return combined.slice(0, 8);
+    return liveList.slice(0, 8);
   }, [shooters, creatorFilter]);
 
   const categoryScrollRef = useRef(null);
@@ -245,7 +235,7 @@ export default function HomeView({
             style={{ transform: `translateX(-${currentBannerIndex * 100}%)` }}
           >
             {displayBanners.map((banner, idx) => {
-              const bgImage = banner.image_display_url || banner.image_url || 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&q=80&w=1600';
+              const bgImage = banner.image_display_url || banner.image_url || null;
               return (
                 <div
                   key={banner.id || idx}

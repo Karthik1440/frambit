@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Calendar, Clock, MapPin, CheckCircle, XCircle, Check, X } from 'lucide-react';
-import { MOCK_BOOKINGS } from '../api';
 
-export default function BookingRequestsView({ onNavigate, initialBookings = MOCK_BOOKINGS, onUpdateStatus, onStartChat }) {
+
+export default function BookingRequestsView({ onNavigate, initialBookings = [], onUpdateStatus, onStartChat }) {
   const [activeTab, setActiveTab] = useState('pending');
   const [bookingsList, setBookingsList] = useState(initialBookings);
 

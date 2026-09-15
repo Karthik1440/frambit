@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, CheckCircle, Calendar, Clock, MapPin, FileText, Lock, LogIn } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Calendar, Clock, MapPin, FileText, Lock, LogIn, Phone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function BookSlotView({ shooter, onNavigate, onConfirmSlot, selectedPackage }) {
@@ -13,16 +13,15 @@ export default function BookSlotView({ shooter, onNavigate, onConfirmSlot, selec
   const [date, setDate] = useState('20 Sep 2026');
   const [time, setTime] = useState('4:00 PM - 6:00 PM');
   const [location, setLocation] = useState('Bengaluru, Karnataka');
+  const [phoneNumber, setPhoneNumber] = useState(userData?.phone || '');
   const [requirements, setRequirements] = useState(
-    selectedPackage
-      ? `Booking shoot package: ${selectedPackage.title}\nReference style: modern & cinematic`
-      : '3 Instagram reels (product + lifestyle)\nReference style: modern & cinematic'
+    selectedPackage ? `Package: ${selectedPackage.title}` : ''
   );
 
   React.useEffect(() => {
     if (selectedPackage && selectedPackage.title) {
       setService(selectedPackage.title);
-      setRequirements(`Booking shoot package: ${selectedPackage.title}\nReference style: modern & cinematic`);
+      setRequirements(`Package: ${selectedPackage.title}`);
     }
   }, [selectedPackage]);
 
@@ -40,6 +39,7 @@ export default function BookSlotView({ shooter, onNavigate, onConfirmSlot, selec
         date,
         time,
         location,
+        phone_number: phoneNumber,
         requirements,
       });
     }
@@ -66,7 +66,7 @@ export default function BookSlotView({ shooter, onNavigate, onConfirmSlot, selec
         <div className="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-frambit-card flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl overflow-hidden bg-slate-100 shrink-0">
-              <img src={shooter?.avatar || shooter?.profile_image || 'https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg'} alt={shooter?.display_name} className="w-full h-full object-cover" />
+              <img src={shooter?.avatar || shooter?.profile_image || null} alt={shooter?.display_name} className="w-full h-full object-cover" />
             </div>
             <div>
               <div className="flex items-center gap-1">
@@ -164,16 +164,37 @@ export default function BookSlotView({ shooter, onNavigate, onConfirmSlot, selec
             </div>
           </div>
 
-          {/* 5. Requirements Textarea */}
+          {/* 5. Phone Number Input */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-600 block">Requirements</label>
+            <label className="text-xs font-bold text-slate-600 block">
+              Phone Number <span className="text-slate-400 font-medium">(for shoot coordination)</span>
+            </label>
+            <div className="relative">
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="e.g. +91 98765 43210"
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-xs font-semibold text-slate-800 focus:outline-none focus:border-indigo-500 placeholder:text-slate-300"
+              />
+              <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+            </div>
+          </div>
+
+          {/* 6. Requirements Textarea */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-600 block">
+              Requirements <span className="text-slate-400 font-medium">(shoot brief, references, mood)</span>
+            </label>
             <div className="relative">
               <textarea
-                rows={3}
+                rows={4}
                 value={requirements}
                 onChange={(e) => setRequirements(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-indigo-500"
+                placeholder="Describe your shoot goals, reference styles, specific scenes..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3.5 pl-10 text-xs font-semibold text-slate-800 focus:outline-none focus:border-indigo-500 placeholder:text-slate-300 resize-none"
               />
+              <FileText className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
             </div>
           </div>
 

@@ -470,7 +470,7 @@ export default function ShooterProfileView({
                           {/* Top Cover Image Banner with Popular Badge Overlay */}
                           <div className="relative h-32 w-full bg-slate-900 overflow-hidden shrink-0">
                             <img
-                              src={pkg.cover_image || shooter.cover_image || 'https://ik.imagekit.io/demo/tr:w-600,h-400/img/plant.jpeg'}
+                              src={pkg.cover_image || shooter.cover_image || null}
                               alt={pkg.title}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                             />

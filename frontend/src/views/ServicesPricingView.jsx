@@ -399,7 +399,7 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
               {/* Top Cover Image Banner with Popular Badge & Action Buttons Overlay */}
               <div className="relative h-36 w-full bg-slate-900 overflow-hidden">
                 <img
-                  src={pkg.cover_image || shooter?.cover_image || 'https://ik.imagekit.io/reelshooter/packages/reel_shoot_package.jpg'}
+                  src={pkg.cover_image || shooter?.cover_image || null}
                   alt={pkg.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />

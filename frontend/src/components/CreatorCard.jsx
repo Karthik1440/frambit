@@ -56,7 +56,7 @@ export default function CreatorCard({ shooter, isSaved = false, onToggleSave, on
     ? `${shooter.city || 'Bengaluru'} • ${shooter.distance}`
     : (shooter.area ? `${shooter.area}, ${shooter.city || 'Bengaluru'}` : `${shooter.city || 'Bengaluru'} • 3.5 km`);
 
-  const imageUrl = shooter.cover_image || shooter.avatar || shooter.profile_image || shooter.user_profile?.profile_image || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600';
+  const imageUrl = shooter.cover_image || shooter.avatar || shooter.profile_image || shooter.user_profile?.profile_image || null;
 
   return (
     <div

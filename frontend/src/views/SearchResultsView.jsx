@@ -300,7 +300,7 @@ export default function SearchResultsView({
                   {/* Left: Photographer Image Card with Reel Badge */}
                   <div className="w-28 h-36 sm:w-36 sm:h-44 rounded-2xl overflow-hidden shrink-0 bg-slate-100 relative shadow-2xs">
                     <img
-                      src={shooter.cover_image || shooter.avatar || shooter.profile_image || shooter.user_profile?.profile_image || 'https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg'}
+                      src={shooter.cover_image || shooter.avatar || shooter.profile_image || shooter.user_profile?.profile_image || null}
                       alt={shooter.display_name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />

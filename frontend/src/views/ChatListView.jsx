@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, ArrowLeft, MessageSquare, Sparkles, User, CheckCheck, Clock, Trash2, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { subscribeToConversations, getOrCreateConversation, markChatAsRead, deleteConversation, getChatPartner } from '../services/chatService';
-import { FEATURED_TOP_CREATORS } from '../data/featuredCreators';
+
 
 export default function ChatListView({ onNavigate, onSelectChat }) {
   const { currentUser, userData, userRole } = useAuth();
@@ -235,54 +235,22 @@ export default function ChatListView({ onNavigate, onSelectChat }) {
 
         {/* Chat List Items */}
         {filteredChats.length === 0 ? (
-          <div className="space-y-6">
-            <div className="bg-white rounded-3xl p-8 sm:p-10 border border-slate-200/80 shadow-2xs text-center space-y-3">
+          <div className="bg-white rounded-3xl p-8 sm:p-10 border border-slate-200/80 shadow-2xs text-center space-y-4">
               <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto shadow-xs">
                 <MessageSquare className="w-6 h-6 text-indigo-500" />
               </div>
               <h3 className="text-sm font-black text-slate-800">No Conversations Yet</h3>
               <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
-                Connect and coordinate with top creators directly in real time.
+                Book a shoot with a creator to start chatting with them directly in real time.
               </p>
+              <button
+                type="button"
+                onClick={() => onNavigate('home')}
+                className="mt-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-2xl shadow-md transition-all cursor-pointer"
+              >
+                Explore Creators
+              </button>
             </div>
-
-            {/* Quick Start Conversations Carousel */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between px-1">
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Start Chat with Top Creators</span>
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {FEATURED_TOP_CREATORS.slice(0, 4).map((creator) => (
-                  <div
-                    key={creator.id}
-                    onClick={() => handleStartQuickChat(creator)}
-                    className="bg-white p-3 rounded-2xl border border-slate-200/80 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer flex items-center gap-3 group"
-                  >
-                    <img
-                      src={creator.avatar}
-                      alt={creator.display_name}
-                      className="w-10 h-10 rounded-xl object-cover shrink-0 group-hover:scale-105 transition-transform"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <h4 className="text-xs font-black text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
-                        {creator.display_name}
-                      </h4>
-                      <p className="text-[10px] text-slate-400 font-medium truncate">
-                        {creator.title}
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                      Chat
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
         ) : (
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs divide-y divide-slate-100 overflow-hidden">
             {filteredChats.map((chat) => {

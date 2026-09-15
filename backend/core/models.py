@@ -292,6 +292,17 @@ class Booking(models.Model):
 
     notes = models.TextField(blank=True)
 
+    phone_number = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Client contact number for this booking"
+    )
+
+    requirements = models.TextField(
+        blank=True,
+        help_text="Specific requirements or shoot brief from the client"
+    )
+
     estimated_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -431,8 +442,8 @@ class PromotionalBanner(models.Model):
     image_url = models.URLField(
         max_length=800,
         blank=True,
-        default="https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&q=80&w=1600",
-        help_text="Or enter an external ImageKit / Unsplash image URL"
+        default="",
+        help_text="Or enter an external ImageKit image URL"
     )
     gradient_overlay = models.CharField(
         max_length=150,
@@ -456,7 +467,7 @@ class PromotionalBanner(models.Model):
                 return self.image.url
             except Exception:
                 pass
-        return self.image_url or "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&q=80&w=1600"
+        return self.image_url or None
 
     def __str__(self):
         return f"Banner: {self.title} ({'Active' if self.is_active else 'Inactive'})"

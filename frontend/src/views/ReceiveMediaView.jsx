@@ -1,51 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Download, Play, Video, CheckCircle2, Share2, Sparkles, FileText } from 'lucide-react';
-import { MOCK_SHOOTERS } from '../api';
 
-export default function ReceiveMediaView({ onNavigate, shooter = MOCK_SHOOTERS[0] }) {
-  const [activeMedia, setActiveMedia] = useState({
-    id: 1,
-    title: 'Final Edited Reel - 4K High Res',
-    category: 'Wedding Reel',
-    file_size: '48.2 MB',
-    format: 'MP4 (1080x1920)',
-    video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-    thumbnail: 'https://ik.imagekit.io/reelshooter/portfolio/urban_fashion_reel.jpg',
-    delivered_at: '14 Apr 2026',
-  });
-
-  const deliveredFiles = [
-    {
-      id: 1,
-      title: 'Final Edited Reel - 4K High Res',
-      category: 'Main Reel',
-      file_size: '48.2 MB',
-      format: 'MP4 (1080x1920)',
-      video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-      thumbnail: 'https://ik.imagekit.io/reelshooter/portfolio/urban_fashion_reel.jpg',
-      delivered_at: '14 Apr 2026',
-    },
-    {
-      id: 2,
-      title: 'Behind The Scenes Clip',
-      category: 'BTS Video',
-      file_size: '24.1 MB',
-      format: 'MP4 (1080x1920)',
-      video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-      thumbnail: 'https://ik.imagekit.io/reelshooter/portfolio/travel_vlog_reel.jpg',
-      delivered_at: '14 Apr 2026',
-    },
-    {
-      id: 3,
-      title: 'Color Graded Cutouts (10 Photos)',
-      category: 'Photo Stills',
-      file_size: '18.5 MB',
-      format: 'ZIP Archive',
-      video_url: null,
-      thumbnail: 'https://ik.imagekit.io/reelshooter/portfolio/editorial_portrait.jpg',
-      delivered_at: '14 Apr 2026',
-    },
-  ];
+export default function ReceiveMediaView({ onNavigate, shooter = null, deliveredFiles = [] }) {
+  const [activeMedia, setActiveMedia] = useState(deliveredFiles[0] || null);
 
   const handleDownload = (file) => {
     alert(`Downloading ${file.title} (${file.file_size})...`);
@@ -67,17 +24,31 @@ export default function ReceiveMediaView({ onNavigate, shooter = MOCK_SHOOTERS[0
             </div>
           </div>
           <span className="flex items-center gap-1.5 text-xs font-extrabold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Delivered & Verified
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Delivered &amp; Verified
           </span>
         </div>
 
+        {/* Empty State */}
+        {deliveredFiles.length === 0 && (
+          <div className="bg-white rounded-3xl p-10 border border-slate-200/80 shadow-2xs text-center space-y-3">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto">
+              <Video className="w-7 h-7 text-slate-400" />
+            </div>
+            <h3 className="text-sm font-black text-slate-800">No Media Delivered Yet</h3>
+            <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+              The creator hasn't uploaded your delivered files yet. Check back after the shoot is marked complete.
+            </p>
+          </div>
+        )}
+
         {/* Video Player Preview Stage */}
+        {activeMedia && (
         <div className="bg-slate-950 rounded-3xl overflow-hidden shadow-2xl border border-slate-800 relative group">
           {activeMedia.video_url ? (
             <div className="relative aspect-[9/16] sm:aspect-video w-full max-h-[420px] bg-black flex items-center justify-center">
               <video
                 src={activeMedia.video_url}
-                poster={activeMedia.thumbnail}
+                poster={activeMedia.thumbnail || undefined}
                 controls
                 className="w-full h-full object-contain"
               />
@@ -116,6 +87,7 @@ export default function ReceiveMediaView({ onNavigate, shooter = MOCK_SHOOTERS[0
             </div>
           </div>
         </div>
+        )}
 
         {/* Delivered Media Files List */}
         <div className="space-y-3">
@@ -135,7 +107,7 @@ export default function ReceiveMediaView({ onNavigate, shooter = MOCK_SHOOTERS[0
                 key={file.id}
                 onClick={() => setActiveMedia(file)}
                 className={`p-3 rounded-2xl border transition-all cursor-pointer flex gap-3 items-center group ${
-                  activeMedia.id === file.id
+                  activeMedia?.id === file.id
                     ? 'bg-indigo-50/70 border-indigo-500 shadow-sm'
                     : 'bg-white border-slate-200/80 hover:border-indigo-300'
                 }`}
@@ -167,7 +139,7 @@ export default function ReceiveMediaView({ onNavigate, shooter = MOCK_SHOOTERS[0
         <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-3xl p-6 flex items-center justify-between gap-4 shadow-lg">
           <div>
             <h3 className="text-sm font-extrabold text-white">Satisfied with your delivered reels?</h3>
-            <p className="text-xs text-slate-300 font-medium">Leave a review for {shooter?.display_name || 'Rahul Sharma'} to support their creator profile!</p>
+            <p className="text-xs text-slate-300 font-medium">Leave a review for {shooter?.display_name || shooter?.name || 'this creator'} to support their creator profile!</p>
           </div>
           <button
             onClick={() => onNavigate('review_rating')}

@@ -91,10 +91,10 @@ export async function getOrCreateConversation(currentUser, targetPerson, booking
   const chatId = getChatId(myId, targetId);
 
   const myName = activeUser.displayName || activeUser.name || (activeUser.email ? activeUser.email.split('@')[0] : 'User');
-  const myAvatar = activeUser.photoURL || activeUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200';
+  const myAvatar = activeUser.photoURL || activeUser.avatar || null;
   
   const targetName = target.display_name || target.name || 'Creator';
-  const targetAvatar = target.avatar || target.profile_image || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600';
+  const targetAvatar = target.avatar || target.profile_image || null;
 
   const clientAliases = [
     activeUser.uid,
@@ -482,7 +482,7 @@ export function getChatPartner(chat, currentUser, userData, userRole) {
   if (!chat) {
     return {
       name: 'Creator',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600',
+      avatar: null,
       role: 'Creator',
     };
   }
@@ -532,7 +532,7 @@ export function getChatPartner(chat, currentUser, userData, userRole) {
     // Current user is the creator -> show client info
     return {
       name: chat.client_name || 'Client',
-      avatar: chat.client_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+      avatar: chat.client_avatar || null,
       role: 'Client',
     };
   }
@@ -540,7 +540,7 @@ export function getChatPartner(chat, currentUser, userData, userRole) {
   // Current user is client -> show creator/shooter info
   return {
     name: chat.shooter_name || 'Creator',
-    avatar: chat.shooter_avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600',
+    avatar: chat.shooter_avatar || null,
     role: 'Creator',
   };
 }

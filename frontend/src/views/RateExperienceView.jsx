@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Star, CheckCircle2, ShieldAlert, AlertCircle } from 'lucide-react';
-import { MOCK_SHOOTERS, submitReviewApi } from '../api';
+import { submitReviewApi } from '../api';
 import { useAuth } from '../context/AuthContext';
 
 export default function RateExperienceView({
   onNavigate,
-  shooter = MOCK_SHOOTERS[0],
+  shooter = null,
   booking = null,
   userRole = 'client',
   onSubmitReview,
@@ -46,7 +46,7 @@ export default function RateExperienceView({
   }
 
   const creatorName = shooter?.display_name || shooter?.name || booking?.shooter_name || 'Creator';
-  const creatorAvatar = shooter?.avatar || booking?.shooter_avatar || 'https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg';
+  const creatorAvatar = shooter?.avatar || booking?.shooter_avatar || null;
   const shootService = booking?.service || booking?.title || shooter?.service || 'Reel Shoot';
 
   const handleSubmit = async (e) => {
@@ -54,7 +54,7 @@ export default function RateExperienceView({
     setIsSubmitting(true);
 
     const clientName = userData?.display_name || userData?.name || booking?.client_name || 'Karthik';
-    const clientAvatar = userData?.avatar || booking?.customer_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200';
+    const clientAvatar = userData?.avatar || booking?.customer_avatar || null;
 
     const reviewData = {
       rating: Number(rating),

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowLeft, Star, MapPin, Heart, Calendar, MessageSquare, Search, Sparkles } from 'lucide-react';
-import { FEATURED_TOP_CREATORS } from '../data/featuredCreators';
+
 import { CATEGORY_LABELS } from '../api';
 
 export default function SavedCreatorsView({
@@ -13,14 +13,7 @@ export default function SavedCreatorsView({
 }) {
   // Combine live shooters with featured creators to ensure any saved creator can be displayed
   const combinedShooters = React.useMemo(() => {
-    const list = Array.isArray(allShooters) ? [...allShooters] : [];
-    const existingIds = new Set(list.map((s) => String(s.id)));
-    for (const feat of FEATURED_TOP_CREATORS) {
-      if (!existingIds.has(String(feat.id))) {
-        list.push(feat);
-      }
-    }
-    return list;
+    return Array.isArray(allShooters) ? allShooters : [];
   }, [allShooters]);
 
   // Filter only the saved creators
@@ -94,7 +87,7 @@ export default function SavedCreatorsView({
         {savedShooters.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {savedShooters.map((shooter) => {
-              const photoUrl = shooter.avatar || shooter.cover_image || shooter.profile_image || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600';
+              const photoUrl = shooter.avatar || shooter.cover_image || shooter.profile_image || null;
               const price = Math.round(Number(shooter.hourly_price || 799)).toLocaleString('en-IN');
               const categoryLabel = CATEGORY_LABELS[shooter.category] || shooter.category || 'Reel Shooter';
 

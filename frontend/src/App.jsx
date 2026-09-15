@@ -4,7 +4,7 @@ import BottomNav from './components/BottomNav';
 import Footer from './components/Footer';
 import { AuthProvider, useAuth, saveStoredUserProfile } from './context/AuthContext';
 import { CATEGORY_LABELS, fetchShooters, fetchShooterById, syncCreatorProfile, fetchBookings, createBooking, updateBookingStatusApi, deleteBooking, matchesBookingId, fetchReviewsApi } from './api';
-import { FEATURED_TOP_CREATORS } from './data/featuredCreators';
+
 import { detectCurrentCity } from './utils/location';
 
 // Client Flow Views
@@ -89,27 +89,16 @@ function MainApp() {
     );
   };
 
-  // Purge any lingering old cached avatar URL / demo packages in localStorage on app load & fetch Django backend creators
+  // Purge any lingering old cached demo data / Unsplash URLs from localStorage on app load
   useEffect(() => {
     try {
-      const demoKeys = ['aarav', 'priya', 'rohan', 'ananya', 'karthik_p', 'example.com'];
+      const demoKeys = ['aarav', 'priya', 'rohan', 'ananya', 'karthik_p', 'example.com', 'unsplash.com', 'photo-1500648767791'];
       ['frambit_shooters', 'frambit_active_creator_profile', 'frambit_active_avatar'].forEach((key) => {
         const item = localStorage.getItem(key);
         if (item && demoKeys.some((dk) => item.toLowerCase().includes(dk))) {
           localStorage.removeItem(key);
-        } else if (item && (item.includes('unsplash.com') || item.includes('photo-1500648767791'))) {
-          localStorage.setItem(key, item.replaceAll(/https:\/\/images\.unsplash\.com\/[^\s"']+/g, 'https://ik.imagekit.io/reelshooter/profile_pictures/default_creator_avatar.jpg'));
         }
       });
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith('user_profile_') || key.startsWith('user_role_'))) {
-          const item = localStorage.getItem(key);
-          if (item && (item.includes('unsplash.com') || item.includes('photo-1500648767791'))) {
-            localStorage.setItem(key, item.replaceAll(/https:\/\/images\.unsplash\.com\/[^\s"']+/g, 'https://ik.imagekit.io/reelshooter/profile_pictures/default_creator_avatar.jpg'));
-          }
-        }
-      }
     } catch (e) {}
 
     // Fetch real Django backend creators from API (Source of Truth)
@@ -118,9 +107,6 @@ function MainApp() {
         setShooters((prev) => {
           const map = new Map();
           backendShooters.forEach((s) => map.set(String(s.id), s));
-          FEATURED_TOP_CREATORS.forEach((fc) => {
-            if (!map.has(String(fc.id))) map.set(String(fc.id), fc);
-          });
           return Array.from(map.values());
         });
 
@@ -143,9 +129,9 @@ function MainApp() {
         }
 
         setSelectedShooter((current) => {
-          if (!current) return backendShooters[0] || FEATURED_TOP_CREATORS[0];
+          if (!current) return backendShooters[0] || null;
           const matched = backendShooters.find((b) => b.id === current.id || (current.email && b.email === current.email));
-          return matched || backendShooters[0] || FEATURED_TOP_CREATORS[0];
+          return matched || backendShooters[0] || null;
         });
       }
     });
@@ -162,12 +148,14 @@ function MainApp() {
           date: b.booking_date || 'Tomorrow',
           time: b.start_time ? b.start_time.slice(0, 5) : '10:00 AM',
           location: b.location || 'Bangalore',
+          phone_number: b.phone_number || '',
+          requirements: b.requirements || '',
           status: (b.status || 'pending').charAt(0).toUpperCase() + (b.status || 'pending').slice(1).toLowerCase(),
           shooter_name: b.shooter_name || 'Creator',
-          shooter_avatar: b.shooter_avatar || 'https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg',
-          image: b.shooter_avatar || 'https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg',
+          shooter_avatar: b.shooter_avatar || null,
+          image: b.shooter_avatar || null,
           client_name: b.customer_name || 'Client',
-          client_avatar: b.customer_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+          client_avatar: b.customer_avatar || null,
           requested_at: b.created_at || 'Recently',
         }));
         setBookings((prev) => {
@@ -215,9 +203,9 @@ function MainApp() {
         }
       }
     } catch (e) {}
-    return FEATURED_TOP_CREATORS;
+    return [];
   });
-  const [selectedShooter, setSelectedShooter] = useState(shooters[0] || FEATURED_TOP_CREATORS[0]);
+  const [selectedShooter, setSelectedShooter] = useState(shooters[0] || null);
   const [selectedSlot, setSelectedSlot] = useState({ date: '20 Sep 2026', time: '4:00 PM - 6:00 PM' });
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [portfolioVideos, setPortfolioVideos] = useState([]);
@@ -306,7 +294,7 @@ function MainApp() {
             shooter: b.shooter_id,
             shooter_id: b.shooter_id,
             customer_name: b.client_name || b.customer_name || 'Client',
-            customer_avatar: b.customer_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+            customer_avatar: b.customer_avatar || null,
             rating: cr.rating || 5,
             comment: cr.comment || 'Great experience!',
             created_at: cr.created_at || b.date || 'Recent',
@@ -379,12 +367,15 @@ function MainApp() {
         'packages',
         'booking_requests',
         'my_bookings',
+        'booking_status',
         'portfolio',
         'profile_edit',
         'availability',
         'reviews_rating',
         'chat_list',
         'chat_conversation',
+        'receive_media',
+        'rate_experience',
         'blueprint',
         'auth_signup',
         'auth_login'
@@ -511,7 +502,7 @@ function MainApp() {
     setSelectedSlot(slotData);
     const packageTitle = slotData.package?.title || slotData.service || 'Reel Shoot';
     const packagePrice = slotData.amount || (slotData.package?.price ? `₹${Number(slotData.package.price).toLocaleString('en-IN')}` : (selectedShooter?.price_display || `₹${selectedShooter?.hourly_price || 799}`));
-    const creatorImg = selectedShooter?.avatar || selectedShooter?.profile_image || 'https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg';
+    const creatorImg = selectedShooter?.avatar || selectedShooter?.profile_image || null;
     
     const newBooking = {
       id: `BK-${Date.now().toString().slice(-4)}`,
@@ -529,6 +520,7 @@ function MainApp() {
       date: slotData.date || '20 Sep 2026',
       time: slotData.time || '4:00 PM - 6:00 PM',
       location: slotData.location || `${currentLocation}, Karnataka`,
+      phone_number: slotData.phone_number || '',
       requirements: slotData.requirements || '',
       status: 'Pending',
       amount: packagePrice,
@@ -547,6 +539,8 @@ function MainApp() {
       client_email: userData?.email || '',
       location: slotData.location || `${currentLocation}, Karnataka`,
       notes: packageTitle,
+      phone_number: slotData.phone_number || '',
+      requirements: slotData.requirements || '',
       estimated_amount: packagePrice.replace(/[^0-9.]/g, ''),
       booking_date: slotData.date || undefined,
       start_time: slotData.time || undefined,
@@ -689,11 +683,11 @@ function MainApp() {
       participants: Array.from(new Set([...clientAliases, ...creatorAliases])),
       client_id: String(myId),
       client_name: activeUser?.displayName || userData?.name || 'Client',
-      client_avatar: activeUser?.photoURL || userData?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+      client_avatar: activeUser?.photoURL || userData?.avatar || null,
       client_email: activeUser.email || userData?.email || '',
       shooter_id: String(targetId),
       shooter_name: target.display_name || target.name || 'Creator',
-      shooter_avatar: target.avatar || target.profile_image || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600',
+      shooter_avatar: target.avatar || target.profile_image || null,
       shooter_email: target.email || '',
       last_message: 'Chat started',
       last_message_time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -723,6 +717,9 @@ function MainApp() {
 
   const handleSelectBooking = (b) => {
     setSelectedBooking(b);
+    try {
+      if (b) localStorage.setItem('frambit_active_booking', JSON.stringify(b));
+    } catch (e) {}
     setCurrentScreen('booking_status');
   };
 
@@ -731,7 +728,7 @@ function MainApp() {
     if (name === 'Karthik P') name = 'Karthik';
     let avatar = userData?.avatar || localStorage.getItem('frambit_active_avatar');
     if (!avatar || avatar.includes('photo-1500648767791')) {
-      avatar = 'https://ik.imagekit.io/reelshooter/profile_pictures/avatar_1789315475330_vicky_hladynets_C8Ta0gwPbQg_unsplash_1.jpg';
+      avatar = null;
     }
     const cover_image = avatar;
     const hourly_price = userData?.hourly_price !== undefined ? Number(userData.hourly_price) : 799;
@@ -979,11 +976,17 @@ function MainApp() {
             userRole={userRole}
             onNavigate={(screen) => setCurrentScreen(screen)}
             onOpenChat={() => {
-              const target = {
-                id: selectedBooking?.shooter_id || selectedBooking?.shooterId || selectedShooter?.id || 1,
-                name: selectedBooking?.shooter_name || selectedShooter?.name || 'Creator',
-                avatar: selectedBooking?.shooter_avatar || selectedShooter?.avatar
-              };
+              const target = userRole === 'creator'
+                ? {
+                    id: selectedBooking?.client_id || selectedBooking?.user_id || 'client',
+                    name: selectedBooking?.client_name || 'Client',
+                    avatar: selectedBooking?.client_avatar
+                  }
+                : {
+                    id: selectedBooking?.shooter_id || selectedBooking?.shooterId || selectedShooter?.id || 1,
+                    name: selectedBooking?.shooter_name || selectedShooter?.name || 'Creator',
+                    avatar: selectedBooking?.shooter_avatar || selectedShooter?.avatar
+                  };
               handleStartChat(target, selectedBooking);
             }}
             onUpdateStatus={handleUpdateBookingStatus}
@@ -1128,7 +1131,7 @@ function MainApp() {
                 shooter: targetShooterId,
                 shooter_id: targetShooterId,
                 customer_name: reviewData.customer_name || userData?.display_name || userData?.name || 'Karthik',
-                customer_avatar: reviewData.customer_avatar || userData?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+                customer_avatar: reviewData.customer_avatar || userData?.avatar || null,
                 rating: Number(reviewData.rating) || 5,
                 comment: reviewData.comment || 'Great shoot experience and professional reel delivery!',
                 created_at: new Date().toISOString(),

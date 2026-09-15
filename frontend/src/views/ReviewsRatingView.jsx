@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowLeft, Star, ThumbsUp } from 'lucide-react';
-import { MOCK_REVIEWS } from '../api';
+
 
 export default function ReviewsRatingView({ onNavigate, reviews = [], shooter = null }) {
   const totalReviews = reviews.length;
@@ -72,7 +72,7 @@ export default function ReviewsRatingView({ onNavigate, reviews = [], shooter = 
           {reviews.length > 0 ? (
             reviews.map((rev) => {
               const name = rev.customer_name || rev.client_name || 'Client';
-              const avatar = rev.customer_avatar || rev.client_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200';
+              const avatar = rev.customer_avatar || rev.client_avatar || null;
               const date = rev.created_at
                 ? (rev.created_at.includes('T') ? new Date(rev.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : rev.created_at)
                 : rev.date || 'Recent';
