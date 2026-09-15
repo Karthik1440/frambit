@@ -475,4 +475,74 @@ export async function deleteConversation(chatId) {
   }
 }
 
+/**
+ * Resolves the other participant in a conversation relative to the currently logged-in user.
+ */
+export function getChatPartner(chat, currentUser, userData, userRole) {
+  if (!chat) {
+    return {
+      name: 'Creator',
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600',
+      role: 'Creator',
+    };
+  }
+
+  const myEmail = (currentUser?.email || userData?.email || '').toLowerCase().trim();
+  const myUid = (currentUser?.uid || '').toLowerCase().trim();
+  const myId = (userData?.id ? String(userData.id) : '').toLowerCase().trim();
+  const myName = (currentUser?.displayName || userData?.display_name || userData?.name || '').toLowerCase().trim();
+
+  const shooterEmail = (chat.shooter_email || '').toLowerCase().trim();
+  const shooterId = (chat.shooter_id || '').toLowerCase().trim();
+  const shooterName = (chat.shooter_name || '').toLowerCase().trim();
+
+  const clientEmail = (chat.client_email || '').toLowerCase().trim();
+  const clientId = (chat.client_id || '').toLowerCase().trim();
+  const clientName = (chat.client_name || '').toLowerCase().trim();
+
+  // Check direct matches for shooter
+  const matchesShooter = Boolean(
+    (myEmail && (shooterEmail === myEmail || shooterId === myEmail)) ||
+    (myUid && shooterId === myUid) ||
+    (myId && (shooterId === myId || shooterId === `creator_${myId}`)) ||
+    (myName && shooterName && shooterName === myName)
+  );
+
+  // Check direct matches for client
+  const matchesClient = Boolean(
+    (myEmail && (clientEmail === myEmail || clientId === myEmail)) ||
+    (myUid && clientId === myUid) ||
+    (myId && clientId === myId) ||
+    (myName && clientName && clientName === myName)
+  );
+
+  // Determine whether current user is the shooter or client in this chat
+  let isCurrentShooter = false;
+  if (matchesShooter && !matchesClient) {
+    isCurrentShooter = true;
+  } else if (matchesClient && !matchesShooter) {
+    isCurrentShooter = false;
+  } else if (userRole === 'creator' || userRole === 'shooter') {
+    isCurrentShooter = true;
+  } else {
+    isCurrentShooter = false;
+  }
+
+  if (isCurrentShooter) {
+    // Current user is the creator -> show client info
+    return {
+      name: chat.client_name || 'Client',
+      avatar: chat.client_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+      role: 'Client',
+    };
+  }
+
+  // Current user is client -> show creator/shooter info
+  return {
+    name: chat.shooter_name || 'Creator',
+    avatar: chat.shooter_avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600',
+    role: 'Creator',
+  };
+}
+
 

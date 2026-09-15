@@ -11,6 +11,14 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
   const { currentUser, userData, logout } = useAuth();
   const [activeNav, setActiveNav] = useState('home');
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Good Morning,';
+    if (hour >= 12 && hour < 17) return 'Good Afternoon,';
+    if (hour >= 17 && hour < 22) return 'Good Evening,';
+    return 'Welcome,';
+  };
+
   const [dashboardBookings, setDashboardBookings] = useState(() => {
     try {
       const stored = localStorage.getItem('frambit_bookings');
@@ -125,6 +133,40 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
       onClearBookings();
     }
   };
+
+  const [dismissedActivityIds, setDismissedActivityIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem('frambit_dismissed_activities');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
+
+  const handleClearRecentActivity = (e) => {
+    if (e) e.stopPropagation();
+    const allIds = dashboardBookings.map((b) => b.id);
+    const updated = Array.from(new Set([...dismissedActivityIds, ...allIds]));
+    setDismissedActivityIds(updated);
+    try {
+      localStorage.setItem('frambit_dismissed_activities', JSON.stringify(updated));
+    } catch (err) {}
+  };
+
+  const handleDismissActivity = (id, e) => {
+    if (e) e.stopPropagation();
+    const updated = Array.from(new Set([...dismissedActivityIds, id]));
+    setDismissedActivityIds(updated);
+    try {
+      localStorage.setItem('frambit_dismissed_activities', JSON.stringify(updated));
+    } catch (err) {}
+  };
+
+  const recentActivities = dashboardBookings.filter(
+    (b) => !dismissedActivityIds.some((dismissedId) => matchesBookingId(b, dismissedId))
+  );
 
   const name = userData?.display_name || userData?.name || shooter?.display_name || shooter?.name || currentUser?.displayName || 'Karthik';
   const roleTitle = 'Videographer';
@@ -276,7 +318,7 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
             {/* 1. Welcome Banner Card with Vector Photographer Illustration */}
             <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-2xs relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1.5 z-10 max-w-sm">
-                <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Good Morning,</span>
+                <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">{getGreeting()}</span>
                 <h1 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight font-sans">
                   {name}
                 </h1>
@@ -827,24 +869,53 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
 
             {/* 3. Recent Activity Feed */}
             <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-2xs space-y-4">
-              <h3 className="text-sm font-black text-slate-900 font-sans border-b border-slate-100 pb-3">
-                Recent Activity
-              </h3>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-900 font-sans">
+                  Recent Activity
+                </h3>
+                {recentActivities.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearRecentActivity}
+                    className="text-[11px] font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 px-2 py-0.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                    title="Clear recent activity feed"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Clear</span>
+                  </button>
+                )}
+              </div>
 
-              {dashboardBookings.length > 0 ? (
+              {recentActivities.length > 0 ? (
                 <div className="space-y-3">
-                  {dashboardBookings.slice(0, 4).map((b) => (
-                    <div key={b.id} className="flex items-start justify-between gap-3 text-xs">
-                      <div className="flex items-start gap-2.5">
-                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5 font-bold">
-                          {b.status === 'Confirmed' ? '✓' : '📅'}
+                  {recentActivities.slice(0, 5).map((b) => (
+                    <div key={b.id} className="group flex items-start justify-between gap-3 text-xs p-1 -mx-1 rounded-xl hover:bg-slate-50 transition-colors">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 font-bold ${
+                          b.status === 'Confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                          b.status === 'Completed' ? 'bg-blue-100 text-blue-700' :
+                          'bg-indigo-100 text-indigo-600'
+                        }`}>
+                          {b.status === 'Confirmed' ? '✓' : b.status === 'Completed' ? '★' : '📅'}
                         </div>
-                        <div>
-                          <div className="font-extrabold text-slate-900">{b.service || 'Shoot Booking'} ({b.status})</div>
+                        <div className="min-w-0">
+                          <div className="font-extrabold text-slate-900 truncate">
+                            {b.service || b.title || 'Shoot Booking'} <span className="font-semibold text-slate-500">({b.status})</span>
+                          </div>
                           <div className="text-[11px] text-slate-400 font-medium">{b.date || 'Upcoming'}</div>
                         </div>
                       </div>
-                      <span className="text-[10px] text-indigo-600 font-bold shrink-0">{b.amount}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] text-indigo-600 font-bold">{b.amount}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDismissActivity(b.id, e)}
+                          className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
+                          title="Remove item"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

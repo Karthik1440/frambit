@@ -44,6 +44,7 @@ import BlueprintCanvasView from './views/BlueprintCanvasView';
 function MainApp() {
   const { currentUser, userRole, userData, setUserData } = useAuth();
   const [currentScreen, setCurrentScreen] = useState('home');
+  const [selectedCategory, setSelectedCategory] = useState('reel_shooter');
   const [postAuthRedirect, setPostAuthRedirect] = useState(null);
   const isLoggedIn = Boolean(
     currentUser ||
@@ -122,6 +123,25 @@ function MainApp() {
           });
           return Array.from(map.values());
         });
+
+        // If logged-in creator matches a backend profile, sync up-to-date packages to userData
+        if (userData && userData.email) {
+          const myBackend = backendShooters.find(
+            (b) => b.email && b.email.toLowerCase() === userData.email.toLowerCase()
+          );
+          if (myBackend && Array.isArray(myBackend.packages) && myBackend.packages.length > 0) {
+            const updatedProfile = {
+              ...userData,
+              packages: myBackend.packages,
+              portfolio: Array.isArray(myBackend.portfolio) && myBackend.portfolio.length > 0
+                ? myBackend.portfolio
+                : (userData.portfolio || [])
+            };
+            if (setUserData) setUserData(updatedProfile);
+            saveStoredUserProfile(userData.email, updatedProfile);
+          }
+        }
+
         setSelectedShooter((current) => {
           if (!current) return backendShooters[0] || FEATURED_TOP_CREATORS[0];
           const matched = backendShooters.find((b) => b.id === current.id || (current.email && b.email === current.email));
@@ -232,6 +252,30 @@ function MainApp() {
       localStorage.setItem('frambit_reviews', JSON.stringify(reviews));
     } catch (e) {}
   }, [reviews]);
+
+  // Unified Saved / Bookmarked Creators state with persistent storage
+  const [savedShooterIds, setSavedShooterIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem('frambit_saved_shooters');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [1, 2];
+  });
+
+  const handleToggleSave = (shooterId) => {
+    setSavedShooterIds((prev) => {
+      const idStr = String(shooterId);
+      const exists = prev.some((id) => String(id) === idStr);
+      const next = exists ? prev.filter((id) => String(id) !== idStr) : [...prev, shooterId];
+      try {
+        localStorage.setItem('frambit_saved_shooters', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
 
   // Load reviews from backend API on mount
   useEffect(() => {
@@ -508,9 +552,13 @@ function MainApp() {
       start_time: slotData.time || undefined,
     }).then((saved) => {
       if (saved && saved.id) {
-        setBookings((prev) =>
-          prev.map((b) => (b.id === newBooking.id ? { ...b, rawId: saved.id } : b))
-        );
+        setBookings((prev) => {
+          const updated = prev.map((b) => (b.id === newBooking.id ? { ...b, rawId: saved.id } : b));
+          try {
+            localStorage.setItem('frambit_bookings', JSON.stringify(updated));
+          } catch (e) {}
+          return updated;
+        });
         setSelectedBooking((prev) =>
           prev && prev.id === newBooking.id ? { ...prev, rawId: saved.id } : prev
         );
@@ -562,7 +610,7 @@ function MainApp() {
 
     // Also persist status transition to backend Django API
     const targetBooking = bookings.find((b) => matchesBookingId(b, bookingId));
-    const dbId = targetBooking?.rawId || (typeof bookingId === 'string' && bookingId.startsWith('BK-') ? bookingId.replace('BK-', '') : bookingId);
+    const dbId = targetBooking?.rawId || (typeof bookingId === 'number' ? bookingId : (!String(bookingId).startsWith('BK-') && !isNaN(Number(bookingId)) ? Number(bookingId) : null));
     if (dbId && !isNaN(Number(dbId))) {
       updateBookingStatusApi(dbId, newStatus);
     }
@@ -570,7 +618,7 @@ function MainApp() {
 
   const handleDeleteBooking = (bookingId) => {
     const targetBooking = bookings.find((b) => matchesBookingId(b, bookingId));
-    const dbId = targetBooking?.rawId || (typeof bookingId === 'string' && bookingId.startsWith('BK-') ? bookingId.replace('BK-', '') : bookingId);
+    const dbId = targetBooking?.rawId || (typeof bookingId === 'number' ? bookingId : (!String(bookingId).startsWith('BK-') && !isNaN(Number(bookingId)) ? Number(bookingId) : null));
     if (dbId && !isNaN(Number(dbId))) {
       deleteBooking(dbId).catch(() => {});
     }
@@ -589,7 +637,7 @@ function MainApp() {
 
   const handleClearAllBookings = () => {
     bookings.forEach((b) => {
-      const dbId = b.rawId || (typeof b.id === 'string' && b.id.startsWith('BK-') ? b.id.replace('BK-', '') : b.id);
+      const dbId = b.rawId || (typeof b.id === 'number' ? b.id : (!String(b.id).startsWith('BK-') && !isNaN(Number(b.id)) ? Number(b.id) : null));
       if (dbId && !isNaN(Number(dbId))) {
         deleteBooking(dbId).catch(() => {});
       }
@@ -691,12 +739,33 @@ function MainApp() {
     const category = userData?.category || 'reel_shooter';
     const title = userData?.title || name;
 
-    // Real active creator's packages and portfolio belong to them ONLY (empty by default for new creators)
-    const packages = userData?.packages || [];
-    const portfolio = userData?.portfolio || [];
+    // Find matching backend shooter to get live synced packages and portfolio from Django DB
+    const backendMatch = Array.isArray(shooters)
+      ? shooters.find(
+          (s) =>
+            s &&
+            userData?.email &&
+            s.email &&
+            s.email.toLowerCase() === userData.email.toLowerCase()
+        )
+      : null;
+
+    const packages =
+      Array.isArray(backendMatch?.packages) && backendMatch.packages.length > 0
+        ? backendMatch.packages
+        : Array.isArray(userData?.packages) && userData.packages.length > 0
+        ? userData.packages
+        : [];
+
+    const portfolio =
+      Array.isArray(backendMatch?.portfolio) && backendMatch.portfolio.length > 0
+        ? backendMatch.portfolio
+        : Array.isArray(userData?.portfolio) && userData.portfolio.length > 0
+        ? userData.portfolio
+        : [];
 
     return {
-      id: userData?.id || 999,
+      id: userData?.id || backendMatch?.id || 999,
       name,
       display_name: name,
       email: userData?.email || '',
@@ -716,7 +785,7 @@ function MainApp() {
       equipment: userData?.equipment || '',
       shooting_styles: userData?.shooting_styles || [],
     };
-  }, [userData]);
+  }, [userData, shooters]);
 
   const syncedShooters = useMemo(() => {
     // Only creators (role='creator' or 'shooter') appear as cards — clients never show
@@ -738,8 +807,12 @@ function MainApp() {
           ...userData,
           display_name: userData.display_name || userData.name || s.display_name,
           name: userData.display_name || userData.name || s.name || s.display_name,
-          packages: Array.isArray(userData.packages) && userData.packages.length > 0 ? userData.packages : (s.packages || []),
-          portfolio: Array.isArray(userData.portfolio) && userData.portfolio.length > 0 ? userData.portfolio : (s.portfolio || [])
+          packages: Array.isArray(s.packages) && s.packages.length > 0
+            ? s.packages
+            : (Array.isArray(userData.packages) && userData.packages.length > 0 ? userData.packages : []),
+          portfolio: Array.isArray(s.portfolio) && s.portfolio.length > 0
+            ? s.portfolio
+            : (Array.isArray(userData.portfolio) && userData.portfolio.length > 0 ? userData.portfolio : []),
         };
       }
       return s;
@@ -759,7 +832,7 @@ function MainApp() {
   }, [selectedShooter, activeCreator, userData, userRole, syncedShooters]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans relative pb-16 sm:pb-0">
+    <div className="h-[100dvh] md:h-auto md:min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans relative overflow-hidden md:overflow-visible">
       
       {/* Top Navbar */}
       {currentScreen !== 'splash' && currentScreen !== 'auth_signup' && currentScreen !== 'auth_login' && currentScreen !== 'creator_login' && userRole !== 'creator' && (
@@ -773,7 +846,7 @@ function MainApp() {
       )}
 
       {/* Main Fluid Responsive Screen Container */}
-      <main className="flex-1 w-full">
+      <main className="flex-1 w-full overflow-y-auto md:overflow-visible overscroll-y-contain pb-20 md:pb-0">
 
         {/* 1. Splash View */}
         {currentScreen === 'splash' && (
@@ -826,6 +899,8 @@ function MainApp() {
         {currentScreen === 'home' && (
           <HomeView
             shooters={syncedShooters}
+            savedIds={savedShooterIds}
+            onToggleSave={handleToggleSave}
             onNavigate={handleNavigate}
             onSelectShooter={handleSelectShooter}
             currentLocation={currentLocation}
@@ -835,9 +910,12 @@ function MainApp() {
         {/* Saved Creators View */}
         {currentScreen === 'saved' && (
           <SavedCreatorsView
-            shooters={syncedShooters}
+            savedIds={savedShooterIds}
+            allShooters={syncedShooters}
+            onToggleSave={handleToggleSave}
             onNavigate={handleNavigate}
             onSelectShooter={handleSelectShooter}
+            onStartChat={handleStartChat}
           />
         )}
 
@@ -845,6 +923,8 @@ function MainApp() {
         {currentScreen === 'search' && (
           <SearchResultsView
             shooters={syncedShooters}
+            savedIds={savedShooterIds}
+            onToggleSave={handleToggleSave}
             selectedCategory={selectedCategory}
             onSelectCategory={setSelectedCategory}
             onNavigate={handleNavigate}
@@ -858,6 +938,8 @@ function MainApp() {
           <ShooterProfileView
             shooter={currentShooterForView}
             reviews={reviews}
+            savedIds={savedShooterIds}
+            onToggleSave={handleToggleSave}
             onNavigate={(screen) => setCurrentScreen(screen)}
             onStartBooking={handleStartBooking}
             onStartChat={(creator) => handleStartChat(creator || currentShooterForView)}
@@ -1114,7 +1196,12 @@ function MainApp() {
       )}
 
       {/* Global Responsive Bottom Navigation Bar */}
-      {currentScreen !== 'splash' && currentScreen !== 'blueprint' && currentScreen !== 'auth_signup' && currentScreen !== 'auth_login' && currentScreen !== 'creator_login' && (
+      {currentScreen !== 'splash' &&
+       currentScreen !== 'blueprint' &&
+       currentScreen !== 'auth_signup' &&
+       currentScreen !== 'auth_login' &&
+       currentScreen !== 'creator_login' &&
+       currentScreen !== 'chat_conversation' && (
         <BottomNav
           activeTab={currentScreen}
           onTabChange={(screenId) => setCurrentScreen(screenId)}

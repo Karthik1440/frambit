@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ArrowLeft, MessageSquare, Sparkles, User, CheckCheck, Clock, Trash2, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { subscribeToConversations, getOrCreateConversation, markChatAsRead, deleteConversation } from '../services/chatService';
+import { subscribeToConversations, getOrCreateConversation, markChatAsRead, deleteConversation, getChatPartner } from '../services/chatService';
 import { FEATURED_TOP_CREATORS } from '../data/featuredCreators';
 
 export default function ChatListView({ onNavigate, onSelectChat }) {
@@ -105,7 +105,8 @@ export default function ChatListView({ onNavigate, onSelectChat }) {
     if (activeFilter === 'bookings' && !chat.booking_id) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const targetName = (chat.shooter_name || chat.client_name || '').toLowerCase();
+      const partner = getChatPartner(chat, currentUser, userData, userRole);
+      const targetName = (partner.name || '').toLowerCase();
       const lastMsg = (chat.last_message || '').toLowerCase();
       return targetName.includes(q) || lastMsg.includes(q);
     }
@@ -285,8 +286,9 @@ export default function ChatListView({ onNavigate, onSelectChat }) {
         ) : (
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs divide-y divide-slate-100 overflow-hidden">
             {filteredChats.map((chat) => {
-              const displayName = chat.shooter_name || chat.client_name || 'Creator';
-              const displayAvatar = chat.shooter_avatar || chat.client_avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600';
+              const partner = getChatPartner(chat, currentUser, userData, userRole);
+              const displayName = partner.name;
+              const displayAvatar = partner.avatar;
 
               return (
                 <div
@@ -307,9 +309,20 @@ export default function ChatListView({ onNavigate, onSelectChat }) {
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
-                          {displayName}
-                        </h3>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <h3 className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                            {displayName}
+                          </h3>
+                          {partner.role && (
+                            <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-md shrink-0 ${
+                              partner.role === 'Client'
+                                ? 'bg-indigo-50 text-indigo-600 border border-indigo-100/80'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200/80'
+                            }`}>
+                              {partner.role}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-slate-400 font-medium shrink-0">
                           {chat.last_message_time || 'Recent'}
                         </span>
@@ -361,7 +374,7 @@ export default function ChatListView({ onNavigate, onSelectChat }) {
               <div className="text-center space-y-1.5">
                 <h3 className="text-base font-black text-slate-900">Delete Conversation?</h3>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Delete conversation with <strong className="text-slate-800">{chatToDelete.shooter_name || chatToDelete.client_name || 'User'}</strong>? All messages in this chat will be permanently removed.
+                  Delete conversation with <strong className="text-slate-800">{getChatPartner(chatToDelete, currentUser, userData, userRole).name}</strong>? All messages in this chat will be permanently removed.
                 </p>
               </div>
               <div className="flex items-center gap-2.5 pt-2">

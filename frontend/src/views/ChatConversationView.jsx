@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, MoreVertical, Paperclip, Send, Image as ImageIcon, CheckCheck, Loader2, Sparkles, X, Trash2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { subscribeToMessages, sendChatMessage, markChatAsRead, clearChatMessages, deleteConversation } from '../services/chatService';
+import { subscribeToMessages, sendChatMessage, markChatAsRead, clearChatMessages, deleteConversation, getChatPartner } from '../services/chatService';
 import { api } from '../api';
 
 const QUICK_PROMPTS = [
@@ -37,8 +37,9 @@ export default function ChatConversationView({ chat, onNavigate, onOpenBookingDe
   const currentUserRole = userRole || 'client';
 
   const chatId = chat?.id || 'chat_general';
-  const partnerName = chat?.shooter_name || chat?.client_name || 'Creator';
-  const partnerAvatar = chat?.shooter_avatar || chat?.client_avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600';
+  const partner = getChatPartner(chat, currentUser, userData, userRole);
+  const partnerName = partner.name;
+  const partnerAvatar = partner.avatar;
 
   // Subscribe to real-time Firebase messages & mark as read
   useEffect(() => {
@@ -215,9 +216,20 @@ export default function ChatConversationView({ chat, onNavigate, onOpenBookingDe
             </div>
 
             <div>
-              <h2 className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
-                {partnerName}
-              </h2>
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
+                  {partnerName}
+                </h2>
+                {partner.role && (
+                  <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-md shrink-0 ${
+                    partner.role === 'Client'
+                      ? 'bg-indigo-50 text-indigo-600 border border-indigo-100/80'
+                      : 'bg-slate-100 text-slate-600 border border-slate-200/80'
+                  }`}>
+                    {partner.role}
+                  </span>
+                )}
+              </div>
               <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Online

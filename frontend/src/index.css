@@ -1,10 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Space+Grotesk:wght@300..700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-heading: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+/* 1. Global Default: Inter for body copy, subtitles, tags, form controls */
 *,
 *::before,
 *::after {
@@ -13,12 +15,40 @@
 
 html,
 body,
-button,
+p,
+span,
 input,
 optgroup,
 select,
-textarea {
+textarea,
+label {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* 2. Space Grotesk: Headings, Wordmark, Nav Labels, Buttons */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+h1 *,
+h2 *,
+h3 *,
+h4 *,
+h5 *,
+h6 *,
+button,
+button *,
+nav,
+nav a,
+nav button,
+nav span,
+.font-heading,
+.font-space,
+.brand-wordmark,
+.wordmark {
+  font-family: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
 @layer base {
@@ -68,7 +98,7 @@ textarea {
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 

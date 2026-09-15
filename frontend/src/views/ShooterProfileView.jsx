@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Share2, Heart, Star, MapPin, Camera, Smartphone, Sparkles, Sliders, CheckCircle, Video, Play, Award, Globe, Calendar, ChevronRight, Package, MessageSquare } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Share2, Heart, Star, MapPin, Camera, Smartphone, Sparkles, Sliders, CheckCircle, Video, Play, Award, Globe, Calendar, ChevronLeft, ChevronRight, Package, MessageSquare, Check } from 'lucide-react';
 import { CATEGORY_LABELS, fetchShooterById, fetchReviewsApi } from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -11,10 +11,18 @@ const InstagramIcon = ({ className = "w-4 h-4" }) => (
   </svg>
 );
 
-export default function ShooterProfileView({ shooter: shooterProp, onNavigate, onStartBooking, onStartChat, reviews: reviewsProp = [] }) {
+export default function ShooterProfileView({
+  shooter: shooterProp,
+  onNavigate,
+  onStartBooking,
+  onStartChat,
+  reviews: reviewsProp = [],
+  savedIds = [],
+  onToggleSave
+}) {
   const { userRole } = useAuth();
   const [shooter, setShooter] = useState(shooterProp);
-  const [isFavorite, setIsFavorite] = useState(false);
+  const isFavorite = savedIds.some((id) => String(id) === String(shooter.id));
   const [activeTab, setActiveTab] = useState('about');
   const [reviews, setReviews] = useState(() => {
     try {
@@ -63,6 +71,46 @@ export default function ShooterProfileView({ shooter: shooterProp, onNavigate, o
       });
     }
   }, [reviewsProp]);
+
+  // Horizontal scroll handling for shoot packages
+  const packagesScrollRef = useRef(null);
+  const [canScrollPackagesLeft, setCanScrollPackagesLeft] = useState(false);
+  const [canScrollPackagesRight, setCanScrollPackagesRight] = useState(false);
+  // Creators see all packages in full grid; clients see horizontal scroll by default with 'See All' toggle
+  const [showAllPackages, setShowAllPackages] = useState(userRole === 'creator');
+
+  const checkPackagesScroll = () => {
+    if (packagesScrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = packagesScrollRef.current;
+      setCanScrollPackagesLeft(scrollLeft > 6);
+      setCanScrollPackagesRight(scrollLeft < scrollWidth - clientWidth - 6);
+    }
+  };
+
+  useEffect(() => {
+    checkPackagesScroll();
+    const el = packagesScrollRef.current;
+    if (el) {
+      el.addEventListener('scroll', checkPackagesScroll, { passive: true });
+      window.addEventListener('resize', checkPackagesScroll);
+      return () => {
+        el.removeEventListener('scroll', checkPackagesScroll);
+        window.removeEventListener('resize', checkPackagesScroll);
+      };
+    }
+  }, [shooter?.packages]);
+
+  const slidePackagesLeft = () => {
+    if (packagesScrollRef.current) {
+      packagesScrollRef.current.scrollBy({ left: -280, behavior: 'smooth' });
+    }
+  };
+
+  const slidePackagesRight = () => {
+    if (packagesScrollRef.current) {
+      packagesScrollRef.current.scrollBy({ left: 280, behavior: 'smooth' });
+    }
+  };
 
   if (!shooter) return null;
 
@@ -153,8 +201,8 @@ export default function ShooterProfileView({ shooter: shooterProp, onNavigate, o
               <div className="flex items-center gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setIsFavorite(!isFavorite)}
-                  className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center text-slate-800 shadow-md hover:bg-white transition-all cursor-pointer"
+                  onClick={() => onToggleSave && onToggleSave(shooter.id)}
+                  className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center text-slate-800 shadow-md hover:bg-white transition-all cursor-pointer active:scale-90"
                   title={isFavorite ? "Remove from saved" : "Save shooter"}
                 >
                   <Heart className={`w-5 h-5 ${isFavorite ? 'fill-rose-500 text-rose-500' : 'text-slate-700'}`} />
@@ -329,25 +377,98 @@ export default function ShooterProfileView({ shooter: shooterProp, onNavigate, o
                   </div>
                 )}
 
-                {/* 5. Shoot Packages & Bundles Section (e.g. 10 Reels + 20 Photos) */}
+                {/* 5. Shoot Packages & Bundles Section (Supports Horizontal Scroll for Users & All Packages Grid for Creators) */}
                 <div className="pt-2 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-base sm:text-lg font-black text-slate-900 font-sans">
-                      Shoot Packages & Services
-                    </h2>
-                    <span className="text-xs font-bold text-indigo-600">Fixed Package Rates</span>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <h2 className="text-base sm:text-lg font-black text-slate-900 font-sans">
+                        Shoot Packages & Services
+                      </h2>
+                      <span className="text-xs font-bold text-indigo-600">Fixed Package Rates</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* See All / Horizontal View Toggle */}
+                      {shooter?.packages && shooter.packages.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllPackages((prev) => !prev)}
+                          className="text-xs font-extrabold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-full border border-indigo-100 transition-all cursor-pointer"
+                        >
+                          {showAllPackages ? 'Scroll View' : `See All (${shooter.packages.length})`}
+                        </button>
+                      )}
+
+                      {/* Creator direct manage button */}
+                      {userRole === 'creator' && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigate && onNavigate('services_pricing')}
+                          className="text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-full shadow-xs transition-all cursor-pointer"
+                        >
+                          + Add / Edit
+                        </button>
+                      )}
+
+                      {/* Scroll arrows when in horizontal view */}
+                      {!showAllPackages && shooter?.packages && shooter.packages.length > 1 && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={slidePackagesLeft}
+                            disabled={!canScrollPackagesLeft}
+                            className={`w-7 h-7 rounded-full flex items-center justify-center border transition-all ${
+                              canScrollPackagesLeft
+                                ? 'border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer shadow-2xs'
+                                : 'border-slate-200 text-slate-300 cursor-not-allowed opacity-40'
+                            }`}
+                            aria-label="Previous Package"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={slidePackagesRight}
+                            disabled={!canScrollPackagesRight}
+                            className={`w-7 h-7 rounded-full flex items-center justify-center border transition-all ${
+                              canScrollPackagesRight
+                                ? 'border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer shadow-2xs'
+                                : 'border-slate-200 text-slate-300 cursor-not-allowed opacity-40'
+                            }`}
+                            aria-label="Next Package"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {shooter?.packages && shooter.packages.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div
+                      ref={packagesScrollRef}
+                      className={
+                        showAllPackages
+                          ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-1"
+                          : "flex items-stretch gap-4 overflow-x-auto pb-3 pt-1 scroll-smooth snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none"
+                      }
+                    >
                       {shooter.packages.map((pkg) => (
                         <div
                           key={pkg.id || pkg.title}
-                          onClick={() => onStartBooking(shooter, pkg)}
-                          className="bg-white rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-xl transition-all cursor-pointer overflow-hidden flex flex-col justify-between group"
+                          onClick={() => {
+                            if (userRole === 'creator') {
+                              if (onNavigate) onNavigate('services_pricing');
+                            } else {
+                              onStartBooking(shooter, pkg);
+                            }
+                          }}
+                          className={`${
+                            showAllPackages ? 'w-full' : 'w-[260px] sm:w-[280px] shrink-0 snap-start'
+                          } bg-white rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-xl transition-all cursor-pointer overflow-hidden flex flex-col justify-between group`}
                         >
                           {/* Top Cover Image Banner with Popular Badge Overlay */}
-                          <div className="relative h-32 sm:h-36 w-full bg-slate-900 overflow-hidden">
+                          <div className="relative h-32 w-full bg-slate-900 overflow-hidden shrink-0">
                             <img
                               src={pkg.cover_image || shooter.cover_image || 'https://ik.imagekit.io/demo/tr:w-600,h-400/img/plant.jpeg'}
                               alt={pkg.title}
@@ -355,8 +476,9 @@ export default function ShooterProfileView({ shooter: shooterProp, onNavigate, o
                             />
                             <div className="absolute inset-0 bg-slate-950/20" />
                             {pkg.popular && (
-                              <span className="absolute top-3 left-3 bg-indigo-600/90 backdrop-blur-md text-white text-[10px] font-extrabold px-3 py-1 rounded-full shadow-md flex items-center gap-1 border border-white/20">
-                                ⭐ Popular
+                              <span className="absolute top-3 left-3 bg-indigo-600/95 backdrop-blur-md text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full shadow-md flex items-center gap-1 border border-white/20">
+                                <Sparkles className="w-3 h-3 text-amber-300" />
+                                <span>Popular</span>
                               </span>
                             )}
                           </div>
@@ -364,14 +486,14 @@ export default function ShooterProfileView({ shooter: shooterProp, onNavigate, o
                           {/* Card Body Content */}
                           <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
                             <div>
-                              <h3 className="text-sm sm:text-base font-black text-slate-900 font-sans tracking-tight leading-snug">
+                              <h3 className="text-sm font-black text-slate-900 font-sans tracking-tight leading-snug">
                                 {pkg.title}
                               </h3>
-                              <div className="text-xl sm:text-2xl font-black text-indigo-600 mt-1">
+                              <div className="text-lg sm:text-xl font-black text-indigo-600 mt-1">
                                 ₹{typeof pkg.price === 'number' ? pkg.price.toLocaleString('en-IN') : pkg.price}
                               </div>
 
-                              {/* Deliverables List with Custom Icons */}
+                              {/* Deliverables List with Clean Icons (No Emoji) */}
                               <div className="space-y-1.5 text-xs font-semibold text-slate-600 mt-3 pt-3 border-t border-slate-100">
                                 {(pkg.deliverablesList || [
                                   pkg.reelsCount,
@@ -382,8 +504,8 @@ export default function ShooterProfileView({ shooter: shooterProp, onNavigate, o
                                   pkg.turnaround
                                 ].filter(Boolean)).map((item, idx) => (
                                   <div key={idx} className="flex items-center gap-2 text-slate-600">
-                                    <div className="w-4 h-4 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 text-[10px] font-bold">
-                                      {item.toLowerCase().includes('reel') ? '😊' : item.toLowerCase().includes('delivery') || item.toLowerCase().includes('hour') || item.toLowerCase().includes('shoot') ? '🕒' : '✓'}
+                                    <div className="w-4 h-4 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                                      <Check className="w-3 h-3 stroke-[2.5]" />
                                     </div>
                                     <span className="font-medium text-xs text-slate-700">{item}</span>
                                   </div>
@@ -391,13 +513,29 @@ export default function ShooterProfileView({ shooter: shooterProp, onNavigate, o
                               </div>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); onStartBooking(shooter, pkg); }}
-                              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-extrabold rounded-2xl transition-all cursor-pointer text-center mt-3 shadow-md shadow-indigo-600/20"
-                            >
-                              Book Package
-                            </button>
+                            {userRole === 'creator' ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onNavigate) onNavigate('services_pricing');
+                                }}
+                                className="w-full py-2.5 bg-slate-100 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-700 border border-indigo-200 text-xs font-extrabold rounded-2xl transition-all cursor-pointer text-center mt-3 shadow-2xs"
+                              >
+                                Manage Package
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onStartBooking(shooter, pkg);
+                                }}
+                                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-extrabold rounded-2xl transition-all cursor-pointer text-center mt-3 shadow-md shadow-indigo-600/20"
+                              >
+                                Book Package
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -578,7 +716,7 @@ export default function ShooterProfileView({ shooter: shooterProp, onNavigate, o
               {/* RIGHT COLUMN: Portfolio Preview & Booking CTA Box (5 cols on desktop) */}
               <div className="lg:col-span-5 space-y-6 lg:border-l lg:border-slate-100 lg:pl-8">
                 
-                {/* Desktop Sticky CTA Box */}
+                {/* Pricing & Booking CTA Box (scrolls with page content) */}
                 <div className="bg-slate-50 rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -692,56 +830,6 @@ export default function ShooterProfileView({ shooter: shooterProp, onNavigate, o
 
       </div>
 
-      {/* Mobile Bottom Fixed CTA Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3.5 lg:hidden z-40 shadow-xl">
-        <div className="max-w-md mx-auto flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[10px] font-extrabold uppercase text-slate-400">Total Price</div>
-            <div className="text-base font-black text-slate-900 leading-none">
-              ₹{Math.round(Number(shooter.hourly_price || 799)).toLocaleString('en-IN')}<span className="text-[10px] text-slate-500">/hr</span>
-            </div>
-          </div>
-
-          {userRole === 'creator' ? (
-            <button
-              id="mobile-profile-inquiries-btn"
-              type="button"
-              onClick={() => onNavigate && onNavigate('chat_list')}
-              className="p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-2xl transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95 flex items-center gap-1.5 text-xs font-bold"
-              title="Client Messages"
-            >
-              <MessageSquare className="w-5 h-5 text-indigo-600" />
-              <span className="hidden xs:inline">Messages</span>
-            </button>
-          ) : (
-            <button
-              id="mobile-profile-message-btn"
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (onStartChat) {
-                  onStartChat(shooter);
-                } else if (onNavigate) {
-                  onNavigate('chat_list');
-                }
-              }}
-              className="p-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-2xl transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
-              title="Chat with creator"
-            >
-              <MessageSquare className="w-5 h-5 text-indigo-600" />
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => onStartBooking(shooter)}
-            className="flex-1 py-3 px-5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-extrabold rounded-2xl shadow-md shadow-indigo-600/30 transition-all text-xs sm:text-sm tracking-wide cursor-pointer text-center"
-          >
-            Book Now
-          </button>
-        </div>
-      </div>
 
     </div>
   );

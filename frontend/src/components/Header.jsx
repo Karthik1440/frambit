@@ -5,7 +5,6 @@ import { detectCurrentCity } from '../utils/location';
 
 export default function Header({ currentScreen, onNavigate, currentLocation = 'Bengaluru', onLocationChange, unreadChatCount = 0 }) {
   const { userRole, currentUser, userData } = useAuth();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDetectingGps, setIsDetectingGps] = useState(false);
 
@@ -30,7 +29,7 @@ export default function Header({ currentScreen, onNavigate, currentLocation = 'B
   const userName = userData?.name || currentUser?.displayName || (currentUser?.email ? formatNameFromEmail(currentUser.email) : 'Profile');
 
   return (
-    <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-50 shadow-2xs">
+    <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-50 shadow-2xs shrink-0">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20 gap-3">
           
@@ -45,7 +44,7 @@ export default function Header({ currentScreen, onNavigate, currentLocation = 'B
               className="w-10 h-10 sm:w-11 sm:h-11 object-contain rounded-2xl group-hover:scale-105 transition-all drop-shadow-xs"
             />
             <div>
-              <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 font-sans leading-none block">
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 brand-wordmark leading-none block">
                 Frambit
               </span>
               <span className="text-[10px] font-bold text-indigo-600 tracking-wider hidden sm:block">
@@ -206,7 +205,7 @@ export default function Header({ currentScreen, onNavigate, currentLocation = 'B
             </button>
           </div>
 
-          {/* Mobile Location & Hamburger Menu Controls */}
+          {/* Mobile Location & Search Controls (No redundant hamburger menu) */}
           <div className="flex md:hidden items-center gap-2">
             <div className="flex items-center gap-1 bg-slate-100/90 text-slate-800 text-[11px] font-bold px-2.5 py-1.5 rounded-full border border-slate-200/60 shadow-2xs">
               <MapPin className="w-3 h-3 text-indigo-600 fill-indigo-100" />
@@ -215,152 +214,14 @@ export default function Header({ currentScreen, onNavigate, currentLocation = 'B
 
             <button
               onClick={() => onNavigate('search')}
-              className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-xl"
+              className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              title="Search"
             >
               <Search className="w-4.5 h-4.5" />
-            </button>
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-1.5 text-slate-700 hover:bg-slate-100 rounded-xl"
-            >
-              {mobileMenuOpen ? <X className="w-4.5 h-4.5" /> : <Menu className="w-4.5 h-4.5" />}
             </button>
           </div>
         </div>
       </div>
-
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-slate-200 px-4 pt-2 pb-5 space-y-3 animate-fade-in">
-          <form onSubmit={handleSearchSubmit} className="relative">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search shooters, locations..."
-              className="w-full bg-slate-100 text-xs text-slate-800 font-medium pl-9 pr-4 py-2.5 rounded-2xl focus:outline-none border border-slate-200"
-            />
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-          </form>
-
-          <div className="flex flex-col gap-1.5 pt-1 text-xs font-bold text-slate-700">
-            {isCreator ? (
-              <>
-                <button
-                  onClick={() => {
-                    onNavigate('dashboard');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between text-indigo-600 font-extrabold"
-                >
-                  <span>Creator Dashboard</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('booking_requests');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between"
-                >
-                  <span>Shoot Requests</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('my_bookings');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between"
-                >
-                  <span>Upcoming Bookings</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('portfolio');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between"
-                >
-                  <span>Photo Portfolio Gallery</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('profile_edit');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between border-t border-slate-100 pt-3"
-                >
-                  <span>Edit Creator Profile</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => {
-                    onNavigate('home');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between"
-                >
-                  <span>Explore Market</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('search');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between"
-                >
-                  <span>Find Shooters</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('my_bookings');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between"
-                >
-                  <span>My Bookings</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('chat_list');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2">
-                    <span>Messages & Chat</span>
-                    {unreadChatCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black shadow-xs">
-                        {unreadChatCount}
-                      </span>
-                    )}
-                  </div>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('portfolio');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between"
-                >
-                  <span>Photo Portfolio</span>
-                </button>
-                <button
-                  onClick={() => {
-                    onNavigate('client_profile');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="py-2.5 px-3 rounded-xl hover:bg-slate-100 text-left flex items-center justify-between border-t border-slate-100 pt-2"
-                >
-                  <span>My Account & Profile</span>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </header>
   );
 }
-

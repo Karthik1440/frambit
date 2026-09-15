@@ -53,7 +53,7 @@ export default function Footer({ onNavigate }) {
   };
 
   return (
-    <footer className="bg-[#0b0f19] text-slate-400 border-t border-slate-800/80 font-sans relative z-10 select-none">
+    <footer className="hidden md:block bg-[#0b0f19] text-slate-400 border-t border-slate-800/80 font-sans relative z-10 select-none">
       {/* Main Footer Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-10">
         
@@ -74,7 +74,7 @@ export default function Footer({ onNavigate }) {
                 className="w-10 h-10 object-contain rounded-2xl group-hover:scale-105 transition-all drop-shadow-xs"
               />
               <div>
-                <span className="text-xl font-black tracking-tight text-white font-sans leading-none block">
+                <span className="text-xl font-black tracking-tight text-white brand-wordmark leading-none block">
                   Frambit
                 </span>
                 <span className="text-[11px] font-bold text-indigo-400 tracking-wider">

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, Plus, Edit2, Trash2, Save,
   Eye, MapPin, X, Check, Sparkles, Camera, Image as ImageIcon,

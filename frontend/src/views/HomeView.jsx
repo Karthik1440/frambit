@@ -28,9 +28,16 @@ const GRADIENT_MAP = {
   model_talent: 'bg-gradient-to-tr from-fuchsia-500 to-pink-600 text-white shadow-lg shadow-fuchsia-500/25',
 };
 
-export default function HomeView({ shooters = [], onNavigate, onSelectShooter, currentLocation = 'Bengaluru', onLocationChange }) {
+export default function HomeView({
+  shooters = [],
+  savedIds = [],
+  onToggleSave,
+  onNavigate,
+  onSelectShooter,
+  currentLocation = 'Bengaluru',
+  onLocationChange
+}) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [savedIds, setSavedIds] = useState([]);
   const [categories, setCategories] = useState(PLATFORM_CATEGORIES);
   const [openFaqId, setOpenFaqId] = useState(1);
   const [banners, setBanners] = useState([]);
@@ -58,16 +65,68 @@ export default function HomeView({ shooters = [], onNavigate, onSelectShooter, c
     });
   }, []);
 
-  const activeBanner = banners[0] || {
-    badge_text: 'Your Creative Partner',
-    title: 'Create Amazing Reels',
-    subtitle: 'Find the best reel shooters, photographers & creators near you.',
-    tagline_text: 'Your Story Our Creators',
-    button_text: 'Book Now',
-    button_action: 'search',
-    category_slug: 'reel_shooter',
-    image_display_url: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&q=80&w=1600',
+  const displayBanners = useMemo(() => {
+    if (Array.isArray(banners) && banners.length > 0) {
+      return banners;
+    }
+    return [{
+      id: 'default',
+      badge_text: 'Your Creative Partner',
+      title: 'Create Amazing Reels',
+      subtitle: 'Find the best reel shooters, photographers & creators near you.',
+      tagline_text: 'Your Story Our Creators',
+      button_text: 'Book Now',
+      button_action: 'search',
+      category_slug: 'reel_shooter',
+      image_display_url: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&q=80&w=1600',
+    }];
+  }, [banners]);
+
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [isBannerPaused, setIsBannerPaused] = useState(false);
+  const bannerTouchStartX = useRef(null);
+
+  // Auto-advance banner every 5 seconds when multiple banners exist and not hovered
+  useEffect(() => {
+    if (displayBanners.length <= 1 || isBannerPaused) return;
+    const timer = setInterval(() => {
+      setCurrentBannerIndex((prev) => (prev + 1) % displayBanners.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [displayBanners.length, isBannerPaused]);
+
+  // Keep index within bounds
+  useEffect(() => {
+    if (currentBannerIndex >= displayBanners.length) {
+      setCurrentBannerIndex(0);
+    }
+  }, [displayBanners.length, currentBannerIndex]);
+
+  const nextBanner = () => {
+    setCurrentBannerIndex((prev) => (prev + 1) % displayBanners.length);
   };
+
+  const prevBanner = () => {
+    setCurrentBannerIndex((prev) => (prev - 1 + displayBanners.length) % displayBanners.length);
+  };
+
+  const handleBannerTouchStart = (e) => {
+    bannerTouchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleBannerTouchEnd = (e) => {
+    if (bannerTouchStartX.current === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = bannerTouchStartX.current - touchEndX;
+    if (diff > 45) {
+      nextBanner();
+    } else if (diff < -45) {
+      prevBanner();
+    }
+    bannerTouchStartX.current = null;
+  };
+
+  const activeBanner = displayBanners[currentBannerIndex] || displayBanners[0];
 
 
   // Dynamically loaded categories with gradient & icon components
@@ -78,6 +137,24 @@ export default function HomeView({ shooters = [], onNavigate, onSelectShooter, c
       gradient: GRADIENT_MAP[cat.id] || 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/30',
     }));
   }, [categories]);
+
+  const [creatorFilter, setCreatorFilter] = useState('top_rated');
+
+  const getShooterDistance = (s) => {
+    if (s.distance_km !== undefined && s.distance_km !== null) {
+      const d = parseFloat(s.distance_km);
+      if (!isNaN(d)) return d;
+    }
+    if (s.distance) {
+      const match = String(s.distance).match(/[\d.]+/);
+      if (match) {
+        const d = parseFloat(match[0]);
+        if (!isNaN(d)) return d;
+      }
+    }
+    const seed = (typeof s.id === 'number' ? s.id : (s.id ? String(s.id).charCodeAt(0) : 7)) % 10;
+    return Number((1.2 + (seed * 0.7)).toFixed(1));
+  };
 
   // Blend live shooters from backend with featured creators to ensure rich 8-card showcase
   const topRatedCreators = useMemo(() => {
@@ -91,8 +168,15 @@ export default function HomeView({ shooters = [], onNavigate, onSelectShooter, c
         combined.push(feat);
       }
     }
+
+    if (creatorFilter === 'nearest') {
+      combined.sort((a, b) => getShooterDistance(a) - getShooterDistance(b));
+    } else {
+      combined.sort((a, b) => (b.rating || 4.8) - (a.rating || 4.8));
+    }
+
     return combined.slice(0, 8);
-  }, [shooters]);
+  }, [shooters, creatorFilter]);
 
   const categoryScrollRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -133,10 +217,8 @@ export default function HomeView({ shooters = [], onNavigate, onSelectShooter, c
 
   const handleToggleSave = (e, shooterId) => {
     e.stopPropagation();
-    if (savedIds.includes(shooterId)) {
-      setSavedIds(savedIds.filter((id) => id !== shooterId));
-    } else {
-      setSavedIds([...savedIds, shooterId]);
+    if (onToggleSave) {
+      onToggleSave(shooterId);
     }
   };
 
@@ -147,81 +229,153 @@ export default function HomeView({ shooters = [], onNavigate, onSelectShooter, c
 
   return (
     <div className="min-h-screen bg-slate-50/70 pb-24 text-slate-800 animate-fade-in font-sans">
-      <div className="max-w-md mx-auto sm:max-w-7xl px-4 sm:px-6 lg:px-8 py-5 space-y-7">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-0 pb-6 sm:py-6 space-y-6 sm:space-y-8">
 
-        {/* 3. Featured Hero Card Banner (Configured & Uploaded by Admin) */}
-        <div className="relative rounded-3xl overflow-hidden bg-slate-950 p-6 sm:p-10 lg:p-12 text-white shadow-2xl border border-slate-800/80 group">
-          
-          {/* Background Photography Backdrop Image (Managed & Uploaded by Admin) */}
-          <div className="absolute inset-0 z-0">
-            <img
-              src={activeBanner.image_display_url || activeBanner.image_url || 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&q=80&w=1600'}
-              alt={activeBanner.title || 'Frambit Banner'}
-              className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700 ease-out"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/85 to-transparent" />
-          </div>
-
-          <div className="relative z-10 flex items-center justify-between gap-6">
-            <div className="space-y-3 sm:space-y-4 max-w-sm sm:max-w-xl">
-              {/* Optional Teal Pill Badge (Admin Configurable) */}
-              {activeBanner.badge_text && (
-                <div>
-                  <span className="inline-block bg-teal-500 hover:bg-teal-600 text-white font-extrabold text-[11px] sm:text-xs px-3.5 py-1 rounded-full shadow-sm tracking-wide transition-colors">
-                    {activeBanner.badge_text}
-                  </span>
-                </div>
-              )}
-
-              <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black leading-tight text-white tracking-tight font-sans">
-                {activeBanner.title || 'Create Amazing Reels'}
-              </h2>
-              
-              <p className="text-xs sm:text-sm lg:text-base text-slate-200 font-medium leading-relaxed max-w-md">
-                {activeBanner.subtitle || 'Find the best reel shooters, photographers & creators near you.'}
-              </p>
-
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => onNavigate(activeBanner.button_action || 'search', activeBanner.category_slug || 'reel_shooter')}
-                  className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-extrabold text-xs sm:text-sm px-6 sm:px-7 py-2.5 sm:py-3 rounded-full shadow-xl transition-all transform hover:scale-105 active:scale-95 cursor-pointer inline-flex items-center gap-2"
+        {/* 3. Featured Hero Card Banner (Sliding Carousel, Taller hero height, seamless flush with top nav, full bleed on mobile) */}
+        <div
+          className="-mx-4 sm:mx-0 rounded-none sm:rounded-3xl relative overflow-hidden bg-slate-950 min-h-[320px] sm:min-h-[380px] lg:min-h-[420px] flex items-stretch text-white shadow-2xl border-b border-t-0 sm:border border-slate-800/80 group select-none"
+          onMouseEnter={() => setIsBannerPaused(true)}
+          onMouseLeave={() => setIsBannerPaused(false)}
+          onTouchStart={handleBannerTouchStart}
+          onTouchEnd={handleBannerTouchEnd}
+        >
+          {/* Sliding Track */}
+          <div
+            className="flex transition-transform duration-700 ease-in-out w-full"
+            style={{ transform: `translateX(-${currentBannerIndex * 100}%)` }}
+          >
+            {displayBanners.map((banner, idx) => {
+              const bgImage = banner.image_display_url || banner.image_url || 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&q=80&w=1600';
+              return (
+                <div
+                  key={banner.id || idx}
+                  className="w-full shrink-0 min-w-full relative py-10 px-6 sm:py-14 sm:px-10 lg:py-16 lg:px-12 flex items-center justify-between"
                 >
-                  <span>{activeBanner.button_text || 'Book Now'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+                  {/* Background Photography Backdrop Image (Admin Managed) */}
+                  <div className="absolute inset-0 z-0">
+                    <img
+                      src={bgImage}
+                      alt={banner.title || 'Frambit Banner'}
+                      className="w-full h-full object-cover opacity-60 group-hover:scale-103 transition-transform duration-700 ease-out"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/85 to-transparent" />
+                  </div>
 
-            {/* Right-Hand Script Tagline Accent (e.g. 'Your Story Our Creators') */}
-            {activeBanner.tagline_text && (
-              <div className="hidden lg:block text-right pr-6 self-center select-none pointer-events-none">
-                <div className="text-2xl xl:text-3xl font-serif italic text-purple-300/80 drop-shadow-md tracking-wider leading-snug rotate-[-3deg]">
-                  {activeBanner.tagline_text}
+                  <div className="relative z-10 flex items-center justify-between gap-6 w-full">
+                    <div className="space-y-3 sm:space-y-4 max-w-sm sm:max-w-xl">
+                      {/* Optional Teal Pill Badge (Admin Configurable) */}
+                      {banner.badge_text && (
+                        <div>
+                          <span className="inline-block bg-teal-500 hover:bg-teal-600 text-white font-extrabold text-[11px] sm:text-xs px-3.5 py-1 rounded-full shadow-sm tracking-wide transition-colors">
+                            {banner.badge_text}
+                          </span>
+                        </div>
+                      )}
+
+                      <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black leading-tight text-white tracking-tight font-sans">
+                        {banner.title || 'Create Amazing Reels'}
+                      </h2>
+
+                      <p className="text-xs sm:text-sm lg:text-base text-slate-200 font-medium leading-relaxed max-w-md">
+                        {banner.subtitle || 'Find the best reel shooters, photographers & creators near you.'}
+                      </p>
+
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={() => onNavigate(banner.button_action || 'search', banner.category_slug || 'reel_shooter')}
+                          className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-extrabold text-xs sm:text-sm px-6 sm:px-7 py-2.5 sm:py-3 rounded-full shadow-xl transition-all transform hover:scale-105 active:scale-95 cursor-pointer inline-flex items-center gap-2"
+                        >
+                          <span>{banner.button_text || 'Book Now'}</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Right-Hand Script Tagline Accent */}
+                    {banner.tagline_text && (
+                      <div className="hidden lg:block text-right pr-10 self-center select-none pointer-events-none">
+                        <div className="text-2xl xl:text-3xl font-serif italic text-purple-300/80 drop-shadow-md tracking-wider leading-snug rotate-[-3deg]">
+                          {banner.tagline_text}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })}
           </div>
+
+          {/* Controls: Arrows & Indicators (Only when 2+ banners exist) */}
+          {displayBanners.length > 1 && (
+            <>
+              {/* Previous Banner Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  prevBanner();
+                }}
+                className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-900/60 hover:bg-slate-900/90 text-white border border-white/20 backdrop-blur-md flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95 cursor-pointer"
+                aria-label="Previous Banner"
+              >
+                <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+
+              {/* Next Banner Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  nextBanner();
+                }}
+                className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-900/60 hover:bg-slate-900/90 text-white border border-white/20 backdrop-blur-md flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95 cursor-pointer"
+                aria-label="Next Banner"
+              >
+                <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+
+              {/* Bottom Pagination Dots / Pills */}
+              <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 sm:gap-2 bg-slate-950/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                {displayBanners.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCurrentBannerIndex(i);
+                    }}
+                    className={`h-1.5 sm:h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                      i === currentBannerIndex
+                        ? 'w-6 sm:w-7 bg-white shadow-sm'
+                        : 'w-1.5 sm:w-2 bg-white/40 hover:bg-white/70'
+                    }`}
+                    aria-label={`Go to slide ${i + 1}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* 4. Service Categories Sliding Row (Smooth Touch Drag / Swipe & Arrow Controls) */}
-        <div className="relative pt-2 group/cat">
+        {/* 4. Service Categories (Horizontal Flex Layout) */}
+        <div className="relative pt-1 group/cat">
           {/* Left slide arrow button (Desktop / Tablet) */}
           {canScrollLeft && (
             <button
               type="button"
               onClick={slideCategoriesLeft}
-              className="hidden sm:flex absolute -left-3 top-[36%] -translate-y-1/2 z-20 w-9 h-9 items-center justify-center rounded-full bg-white shadow-md border border-slate-200/90 text-slate-700 hover:text-indigo-600 hover:scale-110 active:scale-95 transition-all cursor-pointer"
+              className="hidden sm:flex absolute -left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 items-center justify-center rounded-full bg-white shadow-md border border-slate-200/90 text-slate-700 hover:text-indigo-600 hover:scale-110 active:scale-95 transition-all cursor-pointer"
               aria-label="Slide Left"
             >
-              <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+              <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
             </button>
           )}
 
-          {/* Smooth Sliding Row Container */}
+          {/* Horizontal Flex Categories Container */}
           <div
             ref={categoryScrollRef}
-            className="flex items-start gap-4 sm:gap-6 overflow-x-auto no-scrollbar scroll-smooth py-2 -mx-4 sm:mx-0 px-4 sm:px-1 snap-x snap-mandatory select-none"
+            className="flex items-center gap-3 overflow-x-auto no-scrollbar scroll-smooth py-2 -mx-4 sm:mx-0 px-4 sm:px-1 select-none"
           >
             {categoriesList.map((cat) => {
               const Icon = cat.IconComp;
@@ -230,14 +384,14 @@ export default function HomeView({ shooters = [], onNavigate, onSelectShooter, c
                   key={cat.id}
                   type="button"
                   onClick={() => onNavigate('search', cat.id)}
-                  className="w-20 sm:w-24 shrink-0 flex flex-col items-center group cursor-pointer snap-start focus:outline-none"
+                  className="shrink-0 flex items-center gap-2.5 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200/90 hover:border-indigo-300 rounded-2xl shadow-2xs hover:shadow-md transition-all group cursor-pointer focus:outline-none active:scale-95"
                 >
                   <div
-                    className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center ${cat.gradient} group-hover:scale-105 group-hover:-translate-y-1 transition-all duration-300 transform active:scale-95 shadow-md`}
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center ${cat.gradient} group-hover:scale-105 transition-transform duration-200 shadow-xs shrink-0`}
                   >
-                    <Icon className="w-7 h-7 sm:w-8 sm:h-8 stroke-[2.2] text-white" />
+                    <Icon className="w-4 h-4 stroke-[2.2] text-white" />
                   </div>
-                  <span className="mt-2.5 text-[11px] sm:text-xs font-bold text-slate-800 text-center tracking-tight leading-tight group-hover:text-indigo-600 transition-colors line-clamp-2">
+                  <span className="text-xs sm:text-sm font-extrabold text-slate-800 group-hover:text-indigo-600 transition-colors whitespace-nowrap">
                     {cat.label}
                   </span>
                 </button>
@@ -250,34 +404,63 @@ export default function HomeView({ shooters = [], onNavigate, onSelectShooter, c
             <button
               type="button"
               onClick={slideCategoriesRight}
-              className="hidden sm:flex absolute -right-3 top-[36%] -translate-y-1/2 z-20 w-9 h-9 items-center justify-center rounded-full bg-white shadow-md border border-slate-200/90 text-slate-700 hover:text-indigo-600 hover:scale-110 active:scale-95 transition-all cursor-pointer"
+              className="hidden sm:flex absolute -right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 items-center justify-center rounded-full bg-white shadow-md border border-slate-200/90 text-slate-700 hover:text-indigo-600 hover:scale-110 active:scale-95 transition-all cursor-pointer"
               aria-label="Slide Right"
             >
-              <ChevronRight className="w-5 h-5 stroke-[2.5]" />
+              <ChevronRight className="w-4 h-4 stroke-[2.5]" />
             </button>
           )}
         </div>
 
-        {/* 5. Top Rated Creators Section Header & Cards Grid */}
+        {/* 5. Creators Section (Top Rated / Nearest) & Cards Grid */}
         <div className="pt-3">
-          <div className="flex items-end justify-between mb-5">
+          <div className="flex items-end justify-between mb-4">
             <div>
               <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                Top Rated Creators
+                {creatorFilter === 'nearest' ? 'Creators Nearest to You' : 'Top Rated Creators'}
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 font-semibold flex items-center gap-1.5 mt-1">
-                <span className="text-amber-500 text-sm">👑</span>
-                <span>Trusted by 10K+ happy clients</span>
+                {creatorFilter === 'nearest' ? (
+                  <span>Sorted by closest proximity</span>
+                ) : (
+                  <span>Trusted by 10K+ happy clients</span>
+                )}
               </p>
             </div>
 
             <button
               type="button"
-              onClick={() => onNavigate('search', 'top_rated')}
+              onClick={() => onNavigate('search', creatorFilter === 'nearest' ? 'nearest' : 'top_rated')}
               className="text-xs sm:text-sm font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 group transition-all cursor-pointer"
             >
               <span>See All</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+
+          {/* Quick Toggle Filter Tabs (Clean text, no emojis) */}
+          <div className="flex items-center gap-2 mb-4 overflow-x-auto no-scrollbar py-0.5 select-none">
+            <button
+              type="button"
+              onClick={() => setCreatorFilter('top_rated')}
+              className={`flex items-center text-xs font-bold px-4 py-1.5 rounded-full transition-all cursor-pointer active:scale-95 ${
+                creatorFilter === 'top_rated'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+              }`}
+            >
+              <span>Top Rated</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreatorFilter('nearest')}
+              className={`flex items-center text-xs font-bold px-4 py-1.5 rounded-full transition-all cursor-pointer active:scale-95 ${
+                creatorFilter === 'nearest'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+              }`}
+            >
+              <span>Nearest</span>
             </button>
           </div>
 
@@ -287,7 +470,7 @@ export default function HomeView({ shooters = [], onNavigate, onSelectShooter, c
               <CreatorCard
                 key={creator.id}
                 shooter={creator}
-                isSaved={savedIds.includes(creator.id)}
+                isSaved={savedIds.some((id) => String(id) === String(creator.id))}
                 onToggleSave={handleToggleSave}
                 onClick={() => {
                   onSelectShooter(creator);

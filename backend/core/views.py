@@ -307,6 +307,127 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         return Booking.objects.all().order_by("-created_at")
 
+    def create(self, request, *args, **kwargs):
+        # Allow passing flexible booking data from the frontend
+        data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+
+        # 1. Resolve shooter
+        shooter_id = data.get("shooter") or data.get("shooter_id")
+        shooter = None
+        if shooter_id:
+            try:
+                shooter = ShooterProfile.objects.filter(id=int(shooter_id)).first()
+            except (ValueError, TypeError):
+                clean_name = str(shooter_id).replace("creator-", "").replace("-", " ").strip()
+                shooter = ShooterProfile.objects.filter(display_name__icontains=clean_name).first()
+        if not shooter:
+            shooter = ShooterProfile.objects.first()
+        if not shooter:
+            default_user, _ = User.objects.get_or_create(
+                username="default_creator",
+                defaults={"first_name": "Frambit", "last_name": "Creator", "email": "creator@frambit.com"}
+            )
+            default_prof, _ = UserProfile.objects.get_or_create(
+                user=default_user,
+                defaults={"role": "shooter", "city": "Bengaluru"}
+            )
+            shooter, _ = ShooterProfile.objects.get_or_create(
+                user=default_prof,
+                defaults={"display_name": "Frambit Creator", "city": "Bengaluru", "category": "reel_shooter", "hourly_price": Decimal("2500.00")}
+            )
+        data["shooter"] = shooter.id
+
+        # 2. Resolve booking date
+        raw_date = data.get("booking_date")
+        clean_date = None
+        if raw_date:
+            raw_str = str(raw_date).strip()
+            for fmt in ("%Y-%m-%d", "%d %b %Y", "%d %B %Y", "%d/%m/%Y", "%m/%d/%Y"):
+                try:
+                    clean_date = datetime.datetime.strptime(raw_str, fmt).date()
+                    break
+                except (ValueError, TypeError):
+                    continue
+        if not clean_date:
+            clean_date = datetime.date.today() + datetime.timedelta(days=1)
+        data["booking_date"] = clean_date.isoformat()
+
+        # 3. Resolve start time
+        raw_time = data.get("start_time")
+        clean_time = None
+        if raw_time:
+            time_str = str(raw_time).strip()
+            if " - " in time_str:
+                time_str = time_str.split(" - ")[0].strip()
+            for fmt in ("%H:%M:%S", "%H:%M", "%I:%M %p", "%I:%M%p"):
+                try:
+                    clean_time = datetime.datetime.strptime(time_str, fmt).time()
+                    break
+                except (ValueError, TypeError):
+                    continue
+        if not clean_time:
+            clean_time = datetime.time(16, 0)
+        data["start_time"] = clean_time.strftime("%H:%M:%S")
+
+        # 4. Resolve estimated amount
+        duration = int(data.get("duration_minutes", 60) or 60)
+        raw_amount = data.get("estimated_amount") or data.get("amount")
+        if raw_amount:
+            try:
+                clean_amt = str(raw_amount).replace("₹", "").replace(",", "").strip()
+                amount = Decimal(clean_amt)
+            except Exception:
+                amount = calculate_booking_amount(shooter, duration) if shooter else Decimal("4999.00")
+        else:
+            amount = calculate_booking_amount(shooter, duration) if shooter else Decimal("4999.00")
+        data["estimated_amount"] = str(amount)
+
+        # 5. Resolve location and notes
+        data["location"] = data.get("location") or "Indiranagar, Bangalore"
+        data["notes"] = data.get("notes") or data.get("service") or data.get("requirements") or ""
+
+        # 6. Resolve customer profile
+        user = request.user
+        profile = None
+        if user and user.is_authenticated:
+            try:
+                profile = UserProfile.objects.get(user=user)
+            except UserProfile.DoesNotExist:
+                pass
+        if not profile:
+            client_email = (
+                data.get("client_email")
+                or data.get("customer_email")
+                or "guest@frambit.com"
+            )
+            client_name = (
+                data.get("client_name")
+                or data.get("customer_name")
+                or "Client"
+            )
+            client_user, _ = User.objects.get_or_create(
+                username=client_email,
+                defaults={"email": client_email, "first_name": client_name},
+            )
+            profile, _ = UserProfile.objects.get_or_create(
+                user=client_user,
+                defaults={"role": "customer"},
+            )
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(
+            customer=profile,
+            shooter=shooter,
+            booking_date=clean_date,
+            start_time=clean_time,
+            location=data["location"],
+            notes=data["notes"],
+            estimated_amount=amount,
+        )
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     def perform_create(self, serializer):
         user = self.request.user
         profile = None

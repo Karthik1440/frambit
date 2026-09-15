@@ -43,8 +43,11 @@ export default function BottomNav({ activeTab, onTabChange, unreadChatCount = 0 
     const isBookingsActive = activeTab === 'my_bookings' || activeTab === 'booking_status';
     const isProfileActive = activeTab === 'profile_edit' || activeTab === 'client_profile';
 
-    return (
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 w-full bg-slate-900/95 text-white backdrop-blur-md border-t border-slate-800 py-2 px-3 flex items-center justify-around z-50 shadow-2xl select-none">
+  return (
+    <nav
+      className="lg:hidden fixed bottom-0 left-0 right-0 w-full bg-slate-900/95 text-white backdrop-blur-md border-t border-slate-800 py-2.5 px-3 flex items-center justify-around z-50 shadow-2xl select-none pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]"
+      style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
+    >
         {/* 1. Creator Dashboard Tab */}
         <button
           type="button"
@@ -124,7 +127,10 @@ export default function BottomNav({ activeTab, onTabChange, unreadChatCount = 0 
   const isProfileActive = activeTab === 'client_profile';
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-slate-200 py-2 px-2 flex items-center justify-around z-50 shadow-lg select-none">
+    <nav
+      className="md:hidden fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-slate-200 py-2.5 px-2 flex items-center justify-around z-50 shadow-lg select-none pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]"
+      style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
+    >
       {/* 1. Home Tab */}
       <button
         type="button"
