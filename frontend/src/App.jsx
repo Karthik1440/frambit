@@ -99,40 +99,28 @@ function MainApp() {
     );
   };
 
-  // Purge any lingering old cached demo data / Unsplash URLs from localStorage on app load
+  // Purge any lingering old cached demo data from localStorage on app load
   useEffect(() => {
     try {
-      const demoKeys = ['aarav', 'priya', 'rohan', 'ananya', 'karthik_p', 'example.com', 'unsplash.com', 'photo-1500648767791'];
-      ['frambit_shooters', 'frambit_active_creator_profile', 'frambit_active_avatar'].forEach((key) => {
+      const demoKeys = ['aarav', 'priya', 'rohan', 'ananya', 'dhanush', '@frambit.com', 'example.com'];
+      ['frambit_shooters', 'frambit_active_creator_profile', 'frambit_active_avatar', 'frambit_bookings', 'frambit_reviews'].forEach((key) => {
         const item = localStorage.getItem(key);
         if (item && demoKeys.some((dk) => item.toLowerCase().includes(dk))) {
           localStorage.removeItem(key);
         }
       });
-      // Deduplicate any persisted shooters by ID
-      const stored = localStorage.getItem('frambit_shooters');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          const map = new Map();
-          parsed.forEach((s) => {
-            if (s && s.id !== undefined && s.id !== null) {
-              map.set(String(s.id), s);
-            }
-          });
-          localStorage.setItem('frambit_shooters', JSON.stringify(Array.from(map.values())));
-        }
-      }
     } catch (e) {}
 
     // Fetch real Django backend creators from API (Source of Truth)
     fetchShooters().then((backendShooters) => {
-      if (Array.isArray(backendShooters) && backendShooters.length > 0) {
-        setShooters((prev) => {
-          const map = new Map();
-          backendShooters.forEach((s) => map.set(String(s.id), s));
-          return Array.from(map.values());
+      if (Array.isArray(backendShooters)) {
+        const realShooters = backendShooters.filter(s => {
+          const email = (s.email || '').toLowerCase();
+          const name = (s.display_name || s.name || '').toLowerCase();
+          return !email.includes('@frambit.com') && !email.includes('example.com') && !name.includes('dhanush') && !name.includes('priya') && !name.includes('rohan') && !name.includes('ananya');
         });
+        setShooters(realShooters);
+        localStorage.setItem('frambit_shooters', JSON.stringify(realShooters));
 
         // If logged-in user matches a backend shooter profile, ensure creator role and sync data
         const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
