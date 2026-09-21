@@ -83,22 +83,33 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
     if (!file) return;
     setIsUploading(true);
     try {
+      const sanitizedName = `pkg_${Date.now()}_${(file.name || 'cover.jpg').replace(/[^a-zA-Z0-9._-]/g, '_')}`;
       const formData = new FormData();
       formData.append('file', file);
       formData.append('folder', '/packages');
-      formData.append('file_name', `pkg_${Date.now()}`);
+      formData.append('file_name', sanitizedName);
+      formData.append('use_unique_file_name', 'true');
 
-      const res = await api.post('/media/upload/', formData);
+      const res = await api.post('/media/upload/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       const url = res.data?.url || res.data?.file_url;
       if (url) {
         setFormCoverImage(url);
       } else {
-        setFormCoverImage(PRESET_COVER_IMAGES[0].url);
+        const reader = new FileReader();
+        reader.onload = (re) => {
+          if (re.target?.result) setFormCoverImage(re.target.result);
+        };
+        reader.readAsDataURL(file);
       }
     } catch (err) {
-      console.warn('Package image upload fallback to preset:', err);
-      setFormCoverImage(PRESET_COVER_IMAGES[0].url);
-      alert('Could not upload image file to media storage. Applied a preset package image.');
+      console.warn('Package image upload server fallback to local preview:', err);
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        if (re.target?.result) setFormCoverImage(re.target.result);
+      };
+      reader.readAsDataURL(file);
     } finally {
       setIsUploading(false);
     }

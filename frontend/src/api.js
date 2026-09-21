@@ -25,6 +25,12 @@ api.interceptors.request.use(
     } catch (err) {
       console.debug('Failed to get Firebase token:', err);
     }
+
+    // Automatically remove Content-Type if payload is FormData so browser sets correct multipart/form-data boundary
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

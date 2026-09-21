@@ -276,7 +276,9 @@ export default function EditProfileView({ onNavigate, shooter = {}, onUpdatePack
           formData.append('file_name', uniqueFileName);
           formData.append('folder', '/profile_pictures');
 
-          const response = await api.post('/media/upload/', formData);
+          const response = await api.post('/media/upload/', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
           ikUrl = response.data?.url || response.data?.file_url;
         } catch (serverErr) {}
       }
