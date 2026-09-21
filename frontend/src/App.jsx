@@ -1124,7 +1124,7 @@ function MainApp() {
         {/* Creator Flow Section 5: Services & Packages Management */}
         {(currentScreen === 'services_pricing' || currentScreen === 'services' || currentScreen === 'packages') && (
           <ServicesPricingView
-            key={`packages-${activeCreator?.id}-${activeCreator?.packages?.length || 0}`}
+            key={`packages-${activeCreator?.id || 'creator'}`}
             shooter={activeCreator}
             onUpdatePackages={handleUpdatePackages}
             onNavigate={(screen) => setCurrentScreen(screen)}

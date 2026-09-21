@@ -3,24 +3,74 @@ import { ArrowLeft, Plus, Edit2, Trash2, CheckCircle2, Save, Sparkles, AlertCirc
 import { fetchPackages, createPackage, updatePackage, deletePackageApi, api } from '../api';
 
 export default function ServicesPricingView({ shooter, onNavigate, onUpdatePackages }) {
-  const [packages, setPackages] = useState([]);
-  const [loadingPackages, setLoadingPackages] = useState(false);
+  const [packages, setPackages] = useState(() => {
+    if (Array.isArray(shooter?.packages) && shooter.packages.length > 0) {
+      return shooter.packages;
+    }
+    return [];
+  });
+  const [loadingPackages, setLoadingPackages] = useState(() => {
+    // Only show full loader if we have NO packages yet and shooter has a valid ID
+    return Boolean(shooter?.id && (!shooter?.packages || shooter.packages.length === 0));
+  });
   const [saving, setSaving] = useState(false);
 
-  // Load packages from API on mount
+  // Sync if shooter prop changes from parent
   useEffect(() => {
-    if (shooter?.id) {
-      setLoadingPackages(true);
-      fetchPackages(shooter.id)
-        .then((data) => {
-          if (data.length > 0) setPackages(data);
-          // Fallback: use legacy JSON blob if DB has no packages yet
-          else if (shooter.packages && shooter.packages.length > 0) setPackages(shooter.packages);
-        })
-        .finally(() => setLoadingPackages(false));
-    } else if (shooter?.packages?.length > 0) {
-      setPackages(shooter.packages);
+    if (Array.isArray(shooter?.packages) && shooter.packages.length > 0) {
+      setPackages((prev) => (prev.length === 0 ? shooter.packages : prev));
     }
+  }, [shooter?.packages]);
+
+  // Load packages from API on mount with safety timeout
+  useEffect(() => {
+    let isMounted = true;
+    const cleanId = shooter?.id ? String(shooter.id).replace(/^shooter-/, '').trim() : null;
+    const isNumeric = cleanId && /^\d+$/.test(cleanId);
+
+    if (!isNumeric) {
+      if (Array.isArray(shooter?.packages) && shooter.packages.length > 0) {
+        setPackages(shooter.packages);
+      }
+      setLoadingPackages(false);
+      return;
+    }
+
+    // Safety timer: never allow spinner to hang for more than 2 seconds under any circumstance
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) {
+        setLoadingPackages(false);
+      }
+    }, 2000);
+
+    fetchPackages(cleanId)
+      .then((data) => {
+        if (!isMounted) return;
+        if (Array.isArray(data) && data.length > 0) {
+          setPackages(data);
+        } else if (Array.isArray(shooter?.packages) && shooter.packages.length > 0) {
+          setPackages(shooter.packages);
+        } else {
+          setPackages([]);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load packages from API, using cached packages:', err);
+        if (isMounted && Array.isArray(shooter?.packages)) {
+          setPackages(shooter.packages);
+        }
+      })
+      .finally(() => {
+        clearTimeout(safetyTimer);
+        if (isMounted) {
+          setLoadingPackages(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyTimer);
+    };
   }, [shooter?.id]);
 
   const [editingId, setEditingId] = useState(null);
@@ -467,14 +517,34 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
           </form>
         )}
 
-        {/* Shoot Packages Grid */}
-        {loadingPackages ? (
-          <div className="flex items-center justify-center py-20 gap-3 text-slate-400">
-            <Loader2 className="w-6 h-6 animate-spin" />
-            <span className="text-sm font-bold">Loading packages…</span>
+        {/* Shoot Packages Grid / Empty State */}
+        {loadingPackages && packages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400 animate-fade-in">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+            <span className="text-xs font-bold text-slate-500">Loading packages…</span>
+          </div>
+        ) : packages.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-8 sm:p-12 text-center max-w-lg mx-auto my-6 space-y-4 shadow-2xs animate-fade-in">
+            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mx-auto text-2xl shadow-inner">
+              ✨
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-slate-900 font-sans">No Packages Added Yet</h3>
+              <p className="text-xs font-semibold text-slate-500 max-w-xs mx-auto">
+                Create custom pricing packages so your clients can easily book your services with clear deliverables.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleStartAdd}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-2xl shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create First Package</span>
+            </button>
           </div>
         ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
           {packages.map((pkg) => (
             <div
               key={pkg.id || pkg.title}

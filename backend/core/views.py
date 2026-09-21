@@ -360,7 +360,9 @@ class PackageViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         shooter_id = self.request.query_params.get("shooter")
         if shooter_id:
-            return Package.objects.filter(shooter_id=shooter_id)
+            if not str(shooter_id).strip().isdigit():
+                return Package.objects.none()
+            return Package.objects.filter(shooter_id=int(shooter_id))
         return Package.objects.all()
 
     def perform_create(self, serializer):
@@ -820,7 +822,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         shooter_id = self.request.query_params.get("shooter") or self.request.query_params.get("shooter_id")
         if shooter_id:
-            return Review.objects.filter(shooter_id=shooter_id).order_by("-created_at")
+            if not str(shooter_id).strip().isdigit():
+                return Review.objects.none()
+            return Review.objects.filter(shooter_id=int(shooter_id)).order_by("-created_at")
         return Review.objects.select_related(
             "customer__user",
             "shooter",

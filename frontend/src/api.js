@@ -5,6 +5,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || import.meta.env.API_B
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 8000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -358,8 +359,15 @@ export function deduplicateReviews(reviewsList) {
 // ── Package API functions (normalized Package model) ──
 
 export async function fetchPackages(shooterId) {
+  if (!shooterId || shooterId === 'undefined' || shooterId === 'null') {
+    return [];
+  }
+  const cleanId = String(shooterId).replace(/^shooter-/, '').trim();
+  if (!/^\d+$/.test(cleanId)) {
+    return [];
+  }
   try {
-    const res = await api.get('/packages/', { params: { shooter: shooterId } });
+    const res = await api.get('/packages/', { params: { shooter: cleanId }, timeout: 4000 });
     return Array.isArray(res.data) ? res.data : (res.data?.results || []);
   } catch (err) {
     console.warn('Backend fetchPackages fallback:', err.message);
