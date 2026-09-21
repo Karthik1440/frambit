@@ -246,7 +246,7 @@ function MainApp() {
         let parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
           // Keep only non-demo real user profiles
-          const filtered = parsed.filter(s => s && s.email && !s.email.includes('example.com') && !s.email.includes('aarav') && !s.email.includes('priya') && !s.email.includes('rohan'));
+          const filtered = parsed.filter(s => s && s.email && !s.email.includes('example.com') && !s.email.includes('frambit.com') && !s.email.includes('aarav') && !s.email.includes('priya') && !s.email.includes('rohan') && !s.email.includes('dhanush'));
           if (filtered.length > 0) return filtered;
         }
       }
@@ -262,7 +262,13 @@ function MainApp() {
       const stored = localStorage.getItem('frambit_bookings');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter(b => {
+            const cEmail = (b.client_email || b.customer_email || '').toLowerCase();
+            const sEmail = (b.shooter_email || '').toLowerCase();
+            return !cEmail.includes('example.com') && !cEmail.includes('@frambit.com') && !sEmail.includes('@frambit.com');
+          });
+        }
       }
     } catch (e) {}
     return [];
@@ -276,7 +282,13 @@ function MainApp() {
       const stored = localStorage.getItem('frambit_reviews');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return deduplicateReviews(parsed);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const nonDemo = parsed.filter(r => {
+            const author = (r.author_email || r.customer_email || '').toLowerCase();
+            return !author.includes('example.com') && !author.includes('@frambit.com');
+          });
+          return deduplicateReviews(nonDemo);
+        }
       }
     } catch (e) {}
     return [];
