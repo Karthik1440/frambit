@@ -12,6 +12,7 @@ export default function ChatListView({ onNavigate, onSelectChat }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [chatToDelete, setChatToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [imgErrors, setImgErrors] = useState({});
 
   const isLoggedIn = Boolean(
     currentUser ||
@@ -265,13 +266,18 @@ export default function ChatListView({ onNavigate, onSelectChat }) {
                   className="p-3.5 sm:p-4 hover:bg-slate-50/80 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    {/* Avatar with online status */}
-                    <div className="relative w-12 h-12 rounded-2xl overflow-hidden shrink-0 bg-slate-100 border border-slate-100">
-                      <img
-                        src={displayAvatar}
-                        alt={displayName}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
+                    {/* Avatar with online status and fallback */}
+                    <div className="relative w-12 h-12 rounded-2xl overflow-hidden shrink-0 bg-gradient-to-tr from-indigo-500 to-purple-600 border border-slate-100 flex items-center justify-center font-black text-white text-base shadow-2xs select-none">
+                      {displayAvatar && !imgErrors[chat.id] ? (
+                        <img
+                          src={displayAvatar}
+                          alt={displayName}
+                          onError={() => setImgErrors((prev) => ({ ...prev, [chat.id]: true }))}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <span>{(displayName || 'U').charAt(0).toUpperCase()}</span>
+                      )}
                       <span className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
                     </div>
 

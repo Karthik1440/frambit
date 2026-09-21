@@ -7,6 +7,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { auth } from '../firebase';
+import { fetchUserRole, syncCreatorProfile } from '../api';
 
 const AuthContext = createContext();
 
@@ -53,40 +54,83 @@ export function saveStoredUserProfile(email, profileObj) {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
+  const [idToken, setIdToken] = useState(localStorage.getItem('firebase_id_token') || null);
   const [userRole, setUserRole] = useState('user'); // 'user' (client) or 'creator' (shooter)
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Helper to restore session state from persistent storage or Firebase Auth
-  const restoreUserSession = (email) => {
+  // Helper to restore session state from persistent storage or Firebase Auth & verify with backend
+  const restoreUserSession = async (email) => {
     if (!email) return;
-    const storedProfile = getStoredUserProfile(email) || {};
-    const name = storedProfile.display_name || storedProfile.name || formatNameFromEmail(email);
+    const cleanEmail = email.trim().toLowerCase();
+    const storedProfile = getStoredUserProfile(cleanEmail) || {};
+    const name = storedProfile.display_name || storedProfile.name || formatNameFromEmail(cleanEmail);
     const phone = storedProfile.phone || '';
-    const role = storedProfile.role || localStorage.getItem(`user_role_${email.toLowerCase()}`) || 'user';
-
+    const initialRole = storedProfile.role || localStorage.getItem(`user_role_${cleanEmail}`) || 'user';
     const storedAvatar = localStorage.getItem('frambit_active_avatar') || storedProfile.avatar;
 
-    setUserRole(role);
+    setUserRole(initialRole);
     setUserData({
       ...storedProfile,
       name,
       display_name: name,
-      email,
+      email: cleanEmail,
       phone,
-      role,
+      role: initialRole,
       avatar: storedAvatar,
     });
+
+    // Check with backend API to ensure creator role is accurately synced
+    try {
+      const backendRole = await fetchUserRole(cleanEmail);
+      if (backendRole && (backendRole.is_creator || backendRole.role === 'creator')) {
+        const creatorName = backendRole.display_name || backendRole.name || name;
+        const creatorAvatar = backendRole.avatar || storedAvatar;
+        setUserRole('creator');
+        const updated = {
+          ...storedProfile,
+          id: backendRole.shooter_id || storedProfile.id,
+          name: creatorName,
+          display_name: creatorName,
+          email: cleanEmail,
+          phone: backendRole.phone || phone,
+          role: 'creator',
+          avatar: creatorAvatar,
+          city: backendRole.city || storedProfile.city || 'Bengaluru',
+          area: backendRole.area || storedProfile.area || '',
+          bio: backendRole.bio || storedProfile.bio || '',
+          category: backendRole.category || storedProfile.category || 'reel_shooter',
+          hourly_price: backendRole.hourly_price || storedProfile.hourly_price || 799,
+          packages: (Array.isArray(backendRole.packages) && backendRole.packages.length > 0) ? backendRole.packages : (storedProfile.packages || []),
+          portfolio: (Array.isArray(backendRole.portfolio) && backendRole.portfolio.length > 0) ? backendRole.portfolio : (storedProfile.portfolio || []),
+        };
+        setUserData(updated);
+        saveStoredUserProfile(cleanEmail, updated);
+        localStorage.setItem(`user_role_${cleanEmail}`, 'creator');
+        localStorage.setItem('active_user_session', JSON.stringify({ email: cleanEmail, role: 'creator' }));
+      }
+    } catch (e) {
+      console.debug('Background role sync note:', e);
+    }
   };
 
   // Firebase Auth State Listener with localStorage persistent session fallback
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
+        try {
+          const token = await user.getIdToken();
+          setIdToken(token);
+          localStorage.setItem('firebase_id_token', token);
+        } catch (e) {
+          console.debug('Failed to get Firebase token:', e);
+        }
         restoreUserSession(user.email);
         localStorage.setItem('active_user_session', JSON.stringify({ email: user.email, role: userRole }));
       } else {
+        setIdToken(null);
+        localStorage.removeItem('firebase_id_token');
         // Fallback: check if local active session exists across refresh
         try {
           const sessionData = localStorage.getItem('active_user_session');
@@ -131,17 +175,27 @@ export function AuthProvider({ children }) {
 
   // Sign up with Email, Password, Name, Phone Number, and Role
   async function signup(email, password, name, phone, role) {
-    const profile = { name, email, phone, role, avatar: null, packages: [], portfolio: [] };
-    saveStoredUserProfile(email, profile);
-    if (email) {
-      localStorage.setItem(`user_role_${email.toLowerCase()}`, role);
-      localStorage.setItem('active_user_session', JSON.stringify({ email, role }));
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const profile = { name, email: cleanEmail, phone, role, avatar: null, packages: [], portfolio: [] };
+    saveStoredUserProfile(cleanEmail, profile);
+    if (cleanEmail) {
+      localStorage.setItem(`user_role_${cleanEmail}`, role);
+      localStorage.setItem('active_user_session', JSON.stringify({ email: cleanEmail, role }));
     }
     setUserRole(role);
     setUserData(profile);
 
+    if (role === 'creator') {
+      syncCreatorProfile({
+        email: cleanEmail,
+        display_name: name,
+        phone,
+        city: 'Bengaluru',
+      }).catch(() => {});
+    }
+
     try {
-      const res = await createUserWithEmailAndPassword(auth, email, password);
+      const res = await createUserWithEmailAndPassword(auth, cleanEmail, password);
       if (res?.user) {
         await updateProfile(res.user, { displayName: name });
         setCurrentUser(res.user);
@@ -150,7 +204,7 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.warn("Firebase Signup Fallback (Demo Mode / Unconfigured):", err.message);
       // Fallback local state login for dev preview / unconfigured Firebase project
-      const mockUser = { uid: email, email, displayName: name };
+      const mockUser = { uid: cleanEmail, email: cleanEmail, displayName: name };
       setCurrentUser(mockUser);
       return { user: mockUser, detectedRole: role };
     }
@@ -158,44 +212,78 @@ export function AuthProvider({ children }) {
 
   // Sign in with Email and Password (Automatic Creator / User Role Detection & Session Persistence)
   async function login(email, password) {
-    const storedProfile = getStoredUserProfile(email);
-    const storedRole = email ? localStorage.getItem(`user_role_${email.toLowerCase()}`) : null;
-    const detectedRole = storedProfile?.role || storedRole || (email && (email.toLowerCase().includes('creator') || email.toLowerCase().includes('shooter')) ? 'creator' : 'user');
+    const cleanEmail = (email || '').trim().toLowerCase();
+
+    // 1. Authenticate with Firebase
+    let authRes = null;
+    try {
+      authRes = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      if (authRes?.user) {
+        setCurrentUser(authRes.user);
+        try {
+          const token = await authRes.user.getIdToken();
+          setIdToken(token);
+          localStorage.setItem('firebase_id_token', token);
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.warn("Firebase Login Fallback (Demo Mode / Unconfigured):", err.message);
+      const mockUser = { uid: cleanEmail, email: cleanEmail, displayName: formatNameFromEmail(cleanEmail) };
+      setCurrentUser(mockUser);
+      authRes = { user: mockUser };
+    }
+
+    // 2. Query Django backend to get definitive user role and creator details
+    let backendRole = null;
+    try {
+      backendRole = await fetchUserRole(cleanEmail);
+    } catch (e) {
+      console.warn("fetchUserRole error:", e);
+    }
+
+    const storedProfile = getStoredUserProfile(cleanEmail);
+    const storedRole = cleanEmail ? localStorage.getItem(`user_role_${cleanEmail}`) : null;
     
-    const name = storedProfile?.name || formatNameFromEmail(email);
-    const phone = storedProfile?.phone || '';
-    const avatar = storedProfile?.avatar || null;
+    const isCreatorFromBackend = Boolean(backendRole && (backendRole.is_creator || backendRole.role === 'creator'));
+    const isCreatorFallback = Boolean(
+      storedProfile?.role === 'creator' ||
+      storedRole === 'creator' ||
+      cleanEmail.includes('creator') ||
+      cleanEmail.includes('shooter')
+    );
+
+    const detectedRole = isCreatorFromBackend || isCreatorFallback ? 'creator' : (backendRole?.role || storedProfile?.role || storedRole || 'user');
+
+    const name = backendRole?.display_name || backendRole?.name || storedProfile?.name || formatNameFromEmail(cleanEmail);
+    const phone = backendRole?.phone || storedProfile?.phone || '';
+    const avatar = backendRole?.avatar || storedProfile?.avatar || null;
 
     const profile = {
       ...storedProfile,
+      ...(backendRole?.shooter_id ? { id: backendRole.shooter_id } : {}),
       name,
-      email,
+      display_name: name,
+      email: cleanEmail,
       phone,
       role: detectedRole,
       avatar,
-      packages: storedProfile?.packages || [],
-      portfolio: storedProfile?.portfolio || [],
+      city: backendRole?.city || storedProfile?.city || 'Bengaluru',
+      area: backendRole?.area || storedProfile?.area || '',
+      bio: backendRole?.bio || storedProfile?.bio || '',
+      category: backendRole?.category || storedProfile?.category || 'reel_shooter',
+      hourly_price: backendRole?.hourly_price || storedProfile?.hourly_price || 799,
+      packages: (Array.isArray(backendRole?.packages) && backendRole.packages.length > 0) ? backendRole.packages : (storedProfile?.packages || []),
+      portfolio: (Array.isArray(backendRole?.portfolio) && backendRole.portfolio.length > 0) ? backendRole.portfolio : (storedProfile?.portfolio || []),
     };
-    saveStoredUserProfile(email, profile);
-    if (email) {
-      localStorage.setItem('active_user_session', JSON.stringify({ email, role: detectedRole }));
-    }
+
+    saveStoredUserProfile(cleanEmail, profile);
+    localStorage.setItem(`user_role_${cleanEmail}`, detectedRole);
+    localStorage.setItem('active_user_session', JSON.stringify({ email: cleanEmail, role: detectedRole }));
 
     setUserRole(detectedRole);
     setUserData(profile);
 
-    try {
-      const res = await signInWithEmailAndPassword(auth, email, password);
-      if (res?.user) {
-        setCurrentUser(res.user);
-      }
-      return { ...res, detectedRole };
-    } catch (err) {
-      console.warn("Firebase Login Fallback (Demo Mode / Unconfigured):", err.message);
-      const mockUser = { uid: email, email, displayName: name };
-      setCurrentUser(mockUser);
-      return { user: mockUser, detectedRole };
-    }
+    return { ...authRes, detectedRole, backendRole };
   }
 
   // Update active profile details
@@ -235,12 +323,15 @@ export function AuthProvider({ children }) {
       console.warn("Firebase Logout Error:", err);
     }
     localStorage.removeItem('active_user_session');
+    localStorage.removeItem('firebase_id_token');
+    setIdToken(null);
     setCurrentUser(null);
     setUserData(null);
   }
 
   const value = {
     currentUser,
+    idToken,
     userRole,
     setUserRole,
     userData,

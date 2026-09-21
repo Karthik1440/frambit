@@ -1,15 +1,16 @@
 import React from 'react';
 import { ArrowLeft, Star, ThumbsUp } from 'lucide-react';
-
+import { deduplicateReviews } from '../api';
 
 export default function ReviewsRatingView({ onNavigate, reviews = [], shooter = null }) {
-  const totalReviews = reviews.length;
+  const cleanReviews = deduplicateReviews(reviews);
+  const totalReviews = cleanReviews.length;
   const averageRating = totalReviews > 0
-    ? (reviews.reduce((sum, r) => sum + Number(r.rating || 5), 0) / totalReviews).toFixed(1)
+    ? (cleanReviews.reduce((sum, r) => sum + Number(r.rating || 5), 0) / totalReviews).toFixed(1)
     : (shooter?.rating ? Number(shooter.rating).toFixed(1) : '5.0');
 
   const distribution = [5, 4, 3, 2, 1].map((stars) => {
-    const count = reviews.filter((r) => Math.round(Number(r.rating || 5)) === stars).length;
+    const count = cleanReviews.filter((r) => Math.round(Number(r.rating || 5)) === stars).length;
     const percentage = totalReviews > 0 ? Math.round((count / totalReviews) * 100) : (stars === 5 ? 100 : 0);
     return { stars, count, percentage };
   });
@@ -61,7 +62,7 @@ export default function ReviewsRatingView({ onNavigate, reviews = [], shooter = 
         {/* Reviews List */}
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-sm font-extrabold text-slate-900">Client Feedback ({reviews.length})</h2>
+            <h2 className="text-sm font-extrabold text-slate-900">Client Feedback ({totalReviews})</h2>
             {totalReviews > 0 && (
               <span className="text-xs font-extrabold text-amber-600 flex items-center gap-1">
                 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
@@ -69,8 +70,8 @@ export default function ReviewsRatingView({ onNavigate, reviews = [], shooter = 
               </span>
             )}
           </div>
-          {reviews.length > 0 ? (
-            reviews.map((rev) => {
+          {cleanReviews.length > 0 ? (
+            cleanReviews.map((rev) => {
               const name = rev.customer_name || rev.client_name || 'Client';
               const avatar = rev.customer_avatar || rev.client_avatar || null;
               const date = rev.created_at

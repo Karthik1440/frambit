@@ -6,12 +6,14 @@ from django.shortcuts import get_object_or_404
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied as DRFPermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import (
     AllowAny,
     IsAuthenticated,
 )
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .media_services import ImageKitService
@@ -20,6 +22,7 @@ from .models import (
     CreatorCategory,
     UserProfile,
     ShooterProfile,
+    Package,
     PortfolioPhoto,
     Availability,
     Booking,
@@ -32,6 +35,7 @@ from .serializers import (
     CreatorCategorySerializer,
     UserProfileSerializer,
     ShooterProfileSerializer,
+    PackageSerializer,
     PortfolioPhotoSerializer,
     AvailabilitySerializer,
     BookingSerializer,
@@ -53,6 +57,32 @@ from .services import (
 )
 
 
+def get_or_create_client_profile(client_email, client_name="Client"):
+    """
+    Safely find or create a client User and UserProfile by email.
+    Guarantees no duplicate User records with the same email.
+    """
+    client_email = (client_email or "guest@frambit.com").strip().lower()
+    user = User.objects.filter(email__iexact=client_email).first() or User.objects.filter(username=client_email).first()
+    if not user:
+        desired_username = client_email[:150]
+        username = desired_username
+        c = 1
+        while User.objects.filter(username=username).exists():
+            username = f"{desired_username[:140]}_{c}"
+            c += 1
+        user = User.objects.create(
+            username=username,
+            email=client_email,
+            first_name=client_name[:150] if client_name else "Client"
+        )
+    profile, _ = UserProfile.objects.get_or_create(
+        user=user,
+        defaults={"role": "customer"}
+    )
+    return profile
+
+
 class CreatorSyncView(APIView):
     """
     Public endpoint — syncs a creator's profile from the frontend (Firebase auth)
@@ -64,6 +94,8 @@ class CreatorSyncView(APIView):
             experience_years, instagram_handle, is_available }
     """
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'sync'
 
     def post(self, request):
         data = request.data
@@ -73,12 +105,20 @@ class CreatorSyncView(APIView):
         if not email:
             return Response({"detail": "email is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1. Get or create Django User from email
-        username = email.split("@")[0].replace(".", "_").replace("+", "_")[:150]
-        user, _ = User.objects.get_or_create(
-            email=email,
-            defaults={"username": username, "first_name": display_name.split()[0] if display_name else ""},
-        )
+        # 1. Get or create Django User from email safely
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            username = email.split("@")[0].replace(".", "_").replace("+", "_")[:150]
+            base_user = username
+            c = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_user[:140]}_{c}"
+                c += 1
+            user = User.objects.create(
+                email=email,
+                username=username,
+                first_name=display_name.split()[0] if display_name else ""
+            )
         # Keep display name in sync
         if user.first_name != display_name:
             user.first_name = display_name
@@ -96,13 +136,18 @@ class CreatorSyncView(APIView):
             user_profile.profile_image = data["avatar_url"][:500] if len(data["avatar_url"]) < 500 else ""
         user_profile.save()
 
-        # 3. Get or create ShooterProfile
+        # 3. Clean instagram handle
+        raw_insta = str(data.get("instagram_handle") or data.get("instagram") or "").strip()
+        clean_insta = raw_insta.replace("https://www.instagram.com/", "").replace("https://instagram.com/", "").replace("http://instagram.com/", "").strip("/").lstrip("@")
+
+        # 4. Get or create ShooterProfile
         shooter_defaults = {
             "display_name": display_name,
             "category": data.get("category", "reel_shooter") or "reel_shooter",
             "bio": data.get("bio", ""),
             "city": data.get("city", ""),
             "area": data.get("area", ""),
+            "instagram_handle": clean_insta,
             "hourly_price": data.get("hourly_price", 0) or 0,
             "equipment": data.get("equipment", ""),
             "shooting_styles": data.get("shooting_styles", []) or [],
@@ -130,12 +175,223 @@ class CreatorSyncView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class UserRoleLookupView(APIView):
+    """
+    Public lookup endpoint to determine a user's role (creator vs customer) and
+    retrieve their creator/profile details by email or authenticated Firebase token.
+    Used by the frontend to guarantee that creators like yy@gmail.com are accurately
+    routed to the Creator Dashboard upon login.
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'sync'
+
+    def get(self, request):
+        email = request.query_params.get("email", "").strip().lower()
+        if not email and request.user and request.user.is_authenticated:
+            email = getattr(request.user, "email", "").strip().lower()
+        return self._lookup(email)
+
+    def post(self, request):
+        email = request.data.get("email", "").strip().lower()
+        if not email and request.user and request.user.is_authenticated:
+            email = getattr(request.user, "email", "").strip().lower()
+        return self._lookup(email)
+
+    def _lookup(self, email):
+        if not email:
+            return Response({"detail": "email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. Look up User and UserProfile
+        user = User.objects.filter(email__iexact=email).first()
+        profile = getattr(user, "profile", None) if user else None
+
+        # 2. Look up ShooterProfile (via profile relation or directly by email)
+        shooter = None
+        if profile and hasattr(profile, "shooter_profile"):
+            shooter = profile.shooter_profile
+        elif profile and profile.role == "shooter":
+            shooter = ShooterProfile.objects.filter(user=profile).first()
+        else:
+            shooter = ShooterProfile.objects.filter(user__user__email__iexact=email).first()
+
+        is_creator = False
+        if (profile and profile.role == "shooter") or (shooter is not None):
+            is_creator = True
+
+        if is_creator:
+            serializer = ShooterProfileSerializer(shooter) if shooter else None
+            shooter_data = serializer.data if serializer else {}
+            display_name = shooter.display_name if shooter else (user.first_name or "Creator")
+            return Response({
+                "email": email,
+                "role": "creator",
+                "is_creator": True,
+                "shooter_id": shooter.id if shooter else None,
+                "display_name": display_name,
+                "name": display_name,
+                "phone": (profile.phone if profile else "") or shooter_data.get("phone", ""),
+                "city": (shooter.city if shooter else "") or (profile.city if profile else ""),
+                "area": (shooter.area if shooter else "") or "",
+                "bio": (shooter.bio if shooter else "") or "",
+                "category": (shooter.category if shooter else "") or "reel_shooter",
+                "avatar": (profile.profile_image if profile and profile.profile_image else "") or shooter_data.get("avatar", ""),
+                "hourly_price": float(shooter.hourly_price) if shooter else 799,
+                "instagram_handle": (shooter.instagram_handle if shooter else "") or shooter_data.get("instagram_handle", ""),
+                "equipment": (shooter.equipment if shooter else "") or "",
+                "shooting_styles": shooter.shooting_styles if shooter else [],
+                "packages": shooter_data.get("packages", []) if shooter_data else [],
+                "portfolio": shooter_data.get("portfolio", []) if shooter_data else [],
+                "shooter": shooter_data,
+            }, status=status.HTTP_200_OK)
+
+        if profile and profile.role == "customer":
+            return Response({
+                "email": email,
+                "role": "user",
+                "is_creator": False,
+                "display_name": user.get_full_name() or user.username or "Client",
+                "name": user.get_full_name() or user.username or "Client",
+                "phone": profile.phone or "",
+                "city": profile.city or "",
+                "avatar": profile.profile_image or "",
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            "email": email,
+            "role": "user",
+            "is_creator": False,
+            "display_name": user.get_full_name() or user.username if user else "",
+            "name": user.get_full_name() or user.username if user else "",
+            "phone": profile.phone if profile else "",
+            "city": profile.city if profile else "",
+            "avatar": profile.profile_image if (profile and profile.profile_image) else "",
+        }, status=status.HTTP_200_OK)
+
+
+class UserSyncView(APIView):
+    """
+    Public endpoint to sync client/customer and user profile details (including avatar ImageKit URL,
+    display name, phone, city) to User and UserProfile.
+    POST /api/users/sync/
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'sync'
+
+    def post(self, request):
+        data = request.data
+        email = (data.get("email") or "").strip().lower()
+        if not email:
+            return Response({"detail": "email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        display_name = (data.get("display_name") or data.get("name") or "").strip()
+        avatar = (data.get("avatar") or data.get("avatar_url") or data.get("profile_image") or "").strip()
+        phone = (data.get("phone") or "").strip()
+        city = (data.get("city") or "").strip()
+        raw_role = (data.get("role") or "customer").strip().lower()
+        role = "shooter" if raw_role in ["creator", "shooter"] else "customer"
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            username = email.split("@")[0].replace(".", "_")[:140]
+            base_u = username
+            c = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_u}_{c}"
+                c += 1
+            user = User.objects.create(
+                email=email,
+                username=username,
+                first_name=display_name[:150] if display_name else email.split("@")[0]
+            )
+        elif display_name and user.first_name != display_name:
+            user.first_name = display_name[:150]
+            user.save(update_fields=["first_name"])
+
+        profile, _ = UserProfile.objects.get_or_create(
+            user=user,
+            defaults={"role": role, "phone": phone, "city": city}
+        )
+        if avatar:
+            profile.profile_image = avatar[:500] if len(avatar) < 500 else avatar
+        if phone:
+            profile.phone = phone
+        if city:
+            profile.city = city
+        if role == "shooter":
+            profile.role = "shooter"
+        profile.save()
+
+        return Response({
+            "email": email,
+            "display_name": display_name or user.get_full_name() or user.username,
+            "name": display_name or user.get_full_name() or user.username,
+            "avatar": profile.profile_image or "",
+            "phone": profile.phone or "",
+            "city": profile.city or "",
+            "role": "creator" if profile.role == "shooter" else "user",
+            "message": "User profile synced successfully.",
+        }, status=status.HTTP_200_OK)
+
+
 class CreatorCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     """Public read-only endpoint — returns only active categories ordered by sort_order."""
 
     queryset = CreatorCategory.objects.filter(is_active=True)
     serializer_class = CreatorCategorySerializer
     permission_classes = [AllowAny]
+
+
+class PackageViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for a creator's service packages.
+    GET /api/packages/?shooter={id}  — public
+    POST/PATCH/DELETE — shooter auth required (owner only)
+    """
+
+    serializer_class = PackageSerializer
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        shooter_id = self.request.query_params.get("shooter")
+        if shooter_id:
+            return Package.objects.filter(shooter_id=shooter_id)
+        return Package.objects.all()
+
+    def perform_create(self, serializer):
+        profile = getattr(self.request.user, "profile", None)
+        if not profile or profile.role != "shooter":
+            raise DRFPermissionDenied("Only creators can create packages.")
+        shooter, _ = ShooterProfile.objects.get_or_create(
+            user=profile,
+            defaults={
+                "display_name": self.request.user.get_full_name() or self.request.user.username or "Creator",
+                "city": profile.city or "Bengaluru",
+                "hourly_price": Decimal("799.00"),
+            },
+        )
+        serializer.save(shooter=shooter)
+
+    def perform_update(self, serializer):
+        # Only the package owner can update
+        pkg = self.get_object()
+        profile = getattr(self.request.user, "profile", None)
+        if (profile and hasattr(profile, "shooter_profile") and pkg.shooter == profile.shooter_profile) or self.request.user.is_staff:
+            serializer.save()
+        else:
+            raise DRFPermissionDenied("You can only edit your own packages.")
+
+    def perform_destroy(self, instance):
+        profile = getattr(self.request.user, "profile", None)
+        if (profile and hasattr(profile, "shooter_profile") and instance.shooter == profile.shooter_profile) or self.request.user.is_staff:
+            instance.delete()
+        else:
+            raise DRFPermissionDenied("You can only delete your own packages.")
 
 
 class ShooterViewSet(viewsets.ModelViewSet):
@@ -183,7 +439,20 @@ class ShooterViewSet(viewsets.ModelViewSet):
                 Q(category__iexact=category) | Q(shooting_styles__contains=[category])
             )
 
-        return queryset
+        # Exclude incomplete/test accounts: Firebase UIDs are 28-char alphanumeric
+        # strings with no spaces. Filter them out from public listings.
+        import re as _re
+        _uid_pattern = _re.compile(r'^[A-Za-z0-9]{20,}$')
+        valid_ids = [
+            sp.id for sp in queryset
+            if sp.display_name
+            and not _uid_pattern.match(sp.display_name)
+            and sp.city.strip()
+        ]
+        return queryset.filter(id__in=valid_ids)
+
+
+
 
 
 class PortfolioPhotoViewSet(viewsets.ModelViewSet):
@@ -283,9 +552,18 @@ class AvailabilityViewSet(viewsets.ModelViewSet):
 class BookingViewSet(viewsets.ModelViewSet):
 
     serializer_class = BookingSerializer
-    permission_classes = [AllowAny]
+
+    def get_permissions(self):
+        """Public list/retrieve, authenticated create/update/destroy."""
+        if self.action in ("list", "retrieve"):
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
+        # Allow detail actions to resolve the object and enforce explicit 403 ownership checks
+        if self.action in ("confirm", "cancel", "complete"):
+            return Booking.objects.all()
+
         user = self.request.user
         if user and user.is_authenticated:
             try:
@@ -405,14 +683,7 @@ class BookingViewSet(viewsets.ModelViewSet):
                 or data.get("customer_name")
                 or "Client"
             )
-            client_user, _ = User.objects.get_or_create(
-                username=client_email,
-                defaults={"email": client_email, "first_name": client_name},
-            )
-            profile, _ = UserProfile.objects.get_or_create(
-                user=client_user,
-                defaults={"role": "customer"},
-            )
+            profile = get_or_create_client_profile(client_email, client_name)
 
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
@@ -449,14 +720,7 @@ class BookingViewSet(viewsets.ModelViewSet):
                 or self.request.data.get("customer_name")
                 or "Client"
             )
-            client_user, _ = User.objects.get_or_create(
-                username=client_email,
-                defaults={"email": client_email, "first_name": client_name},
-            )
-            profile, _ = UserProfile.objects.get_or_create(
-                user=client_user,
-                defaults={"role": "customer"},
-            )
+            profile = get_or_create_client_profile(client_email, client_name)
 
         shooter_id = self.request.data.get("shooter") or self.request.data.get("shooter_id")
         shooter = None
@@ -504,23 +768,39 @@ class BookingViewSet(viewsets.ModelViewSet):
             estimated_amount=amount,
         )
 
-    @action(detail=True, methods=["post"])
+    def _check_booking_ownership(self, request, booking):
+        """Raise 403 unless the requester is the booking's customer or shooter."""
+        if not request.user or not request.user.is_authenticated:
+            raise DRFPermissionDenied("Authentication required to modify bookings.")
+        try:
+            profile = UserProfile.objects.get(user=request.user)
+        except UserProfile.DoesNotExist:
+            raise DRFPermissionDenied("User profile not found.")
+        is_customer = booking.customer == profile
+        is_shooter = hasattr(profile, 'shooter_profile') and booking.shooter == profile.shooter_profile
+        if not (is_customer or is_shooter or request.user.is_staff):
+            raise DRFPermissionDenied("You do not have permission to modify this booking.")
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def confirm(self, request, pk=None):
         booking = self.get_object()
+        self._check_booking_ownership(request, booking)
         booking.status = "confirmed"
         booking.save(update_fields=["status"])
         return Response(BookingSerializer(booking).data)
 
-    @action(detail=True, methods=["post"])
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def cancel(self, request, pk=None):
         booking = self.get_object()
+        self._check_booking_ownership(request, booking)
         booking.status = "cancelled"
         booking.save(update_fields=["status"])
         return Response(BookingSerializer(booking).data)
 
-    @action(detail=True, methods=["post"])
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def complete(self, request, pk=None):
         booking = self.get_object()
+        self._check_booking_ownership(request, booking)
         booking.status = "completed"
         booking.save(update_fields=["status"])
         increment_shooter_bookings(booking.shooter)
@@ -530,7 +810,12 @@ class BookingViewSet(viewsets.ModelViewSet):
 class ReviewViewSet(viewsets.ModelViewSet):
 
     serializer_class = ReviewSerializer
-    permission_classes = [AllowAny]
+
+    def get_permissions(self):
+        """Public list/retrieve, authenticated create/update/destroy."""
+        if self.action in ("list", "retrieve"):
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
         shooter_id = self.request.query_params.get("shooter") or self.request.query_params.get("shooter_id")
@@ -573,17 +858,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
             else:
                 client_name = data.get("customer_name") or data.get("client_name") or "Client"
                 client_email = data.get("client_email") or f"client_{int(clean_booking_id or 1)}@frambit.com"
-                client_user, _ = User.objects.get_or_create(
-                    username=client_email,
-                    defaults={"email": client_email, "first_name": client_name},
-                )
-                if not client_user.first_name and client_name:
-                    client_user.first_name = client_name
-                    client_user.save()
-                profile, _ = UserProfile.objects.get_or_create(
-                    user=client_user,
-                    defaults={"role": "customer"},
-                )
+                profile = get_or_create_client_profile(client_email, client_name)
 
         # 3. Resolve ShooterProfile
         shooter = None
@@ -704,6 +979,8 @@ class ImageKitAuthView(APIView):
     API view to generate authentication parameters for client-side ImageKit upload SDKs.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'upload'
 
     def get(self, request):
         try:
@@ -720,6 +997,8 @@ class ImageKitUploadView(APIView):
     """
     permission_classes = [AllowAny]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'upload'
 
     def post(self, request):
         file_obj = request.FILES.get("file") or request.data.get("file")

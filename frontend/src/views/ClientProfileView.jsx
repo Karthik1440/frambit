@@ -2,7 +2,8 @@ import React, { useRef, useState } from 'react';
 import axios from 'axios';
 import { Calendar, MessageSquare, Heart, Star, HelpCircle, ChevronRight, LogOut, Mail, Phone, User as UserIcon, ShieldCheck, Camera, CheckCircle2, Loader2, Film } from 'lucide-react';
 import { useAuth, formatNameFromEmail } from '../context/AuthContext';
-import { api } from '../api';
+import { api, syncUserProfile } from '../api';
+import { syncUserAvatarToChats } from '../services/chatService';
 
 export default function ClientProfileView({ onNavigate }) {
   const { currentUser, userData, setUserData, userRole, logout } = useAuth();
@@ -133,22 +134,61 @@ export default function ClientProfileView({ onNavigate }) {
         ikUrl = response.data?.url || response.data?.file_url;
       }
 
-      if (ikUrl) {
-        setUserData({ avatar: ikUrl });
+      const applyAvatar = (avatarUrl) => {
+        setUserData({ avatar: avatarUrl });
         setUploadSuccess(true);
         setTimeout(() => setUploadSuccess(false), 3000);
+
+        try { localStorage.setItem('frambit_active_avatar', avatarUrl); } catch (e) {}
+
+        const activeEmail = email || userData?.email || currentUser?.email;
+        if (activeEmail) {
+          // Real-time sync across Firestore chats (so creators see client's new avatar in real-time)
+          syncUserAvatarToChats(activeEmail, avatarUrl, userRole, name);
+          // Backend Django sync
+          syncUserProfile({
+            email: activeEmail,
+            display_name: name,
+            avatar: avatarUrl,
+            role: userRole,
+            phone: phone !== 'Not provided' ? phone : '',
+          }).catch(() => {});
+        }
+
+        // Update local bookings cache
+        try {
+          const raw = localStorage.getItem('frambit_bookings');
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              const updated = list.map((b) => {
+                if (b.client_email && activeEmail && b.client_email.toLowerCase() === activeEmail.toLowerCase()) {
+                  return { ...b, client_avatar: avatarUrl };
+                }
+                return b;
+              });
+              localStorage.setItem('frambit_bookings', JSON.stringify(updated));
+            }
+          }
+        } catch (e) {}
+
+        window.dispatchEvent(new CustomEvent('frambit_avatar_updated', { detail: { email: activeEmail, avatar: avatarUrl } }));
+      };
+
+      if (ikUrl) {
+        applyAvatar(ikUrl);
       } else {
         const reader = new FileReader();
-        reader.onloadend = () => setUserData({ avatar: reader.result });
+        reader.onloadend = () => {
+          if (reader.result) applyAvatar(reader.result);
+        };
         reader.readAsDataURL(file);
       }
     } catch (err) {
       console.warn("ImageKit profile upload fallback:", err);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setUserData({ avatar: reader.result });
-        setUploadSuccess(true);
-        setTimeout(() => setUploadSuccess(false), 3000);
+        if (reader.result) applyAvatar(reader.result);
       };
       reader.readAsDataURL(file);
     } finally {
@@ -234,6 +274,28 @@ export default function ClientProfileView({ onNavigate }) {
 
         {/* Account Menu Items List */}
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs divide-y divide-slate-100 overflow-hidden">
+
+          {/* Creator Dashboard Access Banner */}
+          {(userRole === 'creator' || (userData && (userData.role === 'creator' || userData.role === 'shooter'))) && (
+            <button
+              onClick={() => onNavigate('dashboard')}
+              className="w-full p-4 bg-gradient-to-r from-indigo-50/90 via-purple-50/70 to-indigo-50/90 hover:from-indigo-100 hover:to-purple-100 flex items-center justify-between transition-all group cursor-pointer border-b border-indigo-100/80"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center group-hover:scale-105 transition-transform shadow-md shadow-indigo-600/20">
+                  <Film className="w-4.5 h-4.5" />
+                </div>
+                <div className="text-left">
+                  <div className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                    <span>Creator Studio Dashboard</span>
+                    <span className="px-1.5 py-0.2 bg-indigo-600 text-white text-[9px] font-black rounded-full uppercase tracking-wider">Active</span>
+                  </div>
+                  <div className="text-[11px] text-indigo-700 font-medium">Manage shoots, earnings, packages & profile</div>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-indigo-600 group-hover:translate-x-1 transition-transform" />
+            </button>
+          )}
 
           {/* 1. My Bookings */}
           <button

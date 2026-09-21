@@ -1,13 +1,27 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Plus, Edit2, Trash2, CheckCircle2, Save, Sparkles, AlertCircle, Check, Upload, Camera, Image as ImageIcon, Loader2 } from 'lucide-react';
-import { DEFAULT_VIDEOGRAPHER_PACKAGES } from '../api';
+import { fetchPackages, createPackage, updatePackage, deletePackageApi, api } from '../api';
 
 export default function ServicesPricingView({ shooter, onNavigate, onUpdatePackages }) {
-  const [packages, setPackages] = useState(
-    shooter?.packages && shooter.packages.length > 0
-      ? shooter.packages
-      : []
-  );
+  const [packages, setPackages] = useState([]);
+  const [loadingPackages, setLoadingPackages] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Load packages from API on mount
+  useEffect(() => {
+    if (shooter?.id) {
+      setLoadingPackages(true);
+      fetchPackages(shooter.id)
+        .then((data) => {
+          if (data.length > 0) setPackages(data);
+          // Fallback: use legacy JSON blob if DB has no packages yet
+          else if (shooter.packages && shooter.packages.length > 0) setPackages(shooter.packages);
+        })
+        .finally(() => setLoadingPackages(false));
+    } else if (shooter?.packages?.length > 0) {
+      setPackages(shooter.packages);
+    }
+  }, [shooter?.id]);
 
   const [editingId, setEditingId] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -64,61 +78,124 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
     setFormCoverImage(pkg.cover_image || PRESET_COVER_IMAGES[0].url);
   };
 
-  const handleSavePackage = (e) => {
-    e.preventDefault();
-    if (!formTitle || !formPrice) return;
+  const handleImageUpload = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', '/packages');
+      formData.append('file_name', `pkg_${Date.now()}`);
 
-    const items = formDeliverables
-      ? formDeliverables.split(',').map((s) => s.trim()).filter(Boolean)
-      : ['Custom Deliverable'];
-
-    const formattedTurnaround = formTurnaround.toLowerCase().startsWith('delivery:')
-      ? formTurnaround
-      : `Delivery: ${formTurnaround}`;
-
-    const coverUrl = formCoverImage || PRESET_COVER_IMAGES[0].url;
-
-    if (editingId) {
-      // Update existing package
-      const updated = packages.map((p) =>
-        p.id === editingId
-          ? {
-              ...p,
-              title: formTitle,
-              icon: formIcon,
-              price: Number(formPrice),
-              duration: formDuration,
-              deliverablesList: items,
-              turnaround: formattedTurnaround,
-              popular: formPopular,
-              cover_image: coverUrl,
-            }
-          : p
-      );
-      setPackages(updated);
-      if (onUpdatePackages) onUpdatePackages(updated);
-      setEditingId(null);
-    } else {
-      // Add new package
-      const newPkg = {
-        id: Date.now(),
-        title: formTitle,
-        icon: formIcon || '🎥',
-        price: Number(formPrice),
-        duration: formDuration || '2 hours shoot',
-        deliverablesList: items,
-        turnaround: formattedTurnaround,
-        popular: formPopular,
-        cover_image: coverUrl,
-      };
-      const updated = [...packages, newPkg];
-      setPackages(updated);
-      if (onUpdatePackages) onUpdatePackages(updated);
-      setShowAddForm(false);
+      const res = await api.post('/media/upload/', formData);
+      const url = res.data?.url || res.data?.file_url;
+      if (url) {
+        setFormCoverImage(url);
+      } else {
+        setFormCoverImage(PRESET_COVER_IMAGES[0].url);
+      }
+    } catch (err) {
+      console.warn('Package image upload fallback to preset:', err);
+      setFormCoverImage(PRESET_COVER_IMAGES[0].url);
+      alert('Could not upload image file to media storage. Applied a preset package image.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const handleDeletePackage = (id) => {
+  const handleSavePackage = async (e) => {
+    e.preventDefault();
+    if (!formTitle || !formTitle.trim()) {
+      alert('Please enter a package title.');
+      return;
+    }
+
+    const cleanPriceStr = String(formPrice).replace(/[^\d.]/g, '');
+    const numericPrice = Number(cleanPriceStr);
+    if (isNaN(numericPrice) || numericPrice <= 0) {
+      alert('Please enter a valid price for this package (e.g. 2999).');
+      return;
+    }
+
+    const deliverables = formDeliverables
+      ? formDeliverables.split(',').map((s) => s.trim()).filter(Boolean)
+      : ['Custom Deliverable'];
+
+    const formattedTurnaround = formTurnaround
+      ? (formTurnaround.toLowerCase().startsWith('delivery:')
+          ? formTurnaround
+          : `Delivery: ${formTurnaround}`)
+      : 'Delivery: 3 days';
+
+    const coverUrl = formCoverImage || PRESET_COVER_IMAGES[0].url;
+    setSaving(true);
+    try {
+      const isRealDbId = editingId && (typeof editingId === 'number' || /^\d+$/.test(String(editingId)));
+
+      if (isRealDbId) {
+        const updated = await updatePackage(editingId, {
+          title: formTitle.trim(),
+          icon: formIcon || '🎥',
+          price: numericPrice,
+          duration: formDuration || '2 hours',
+          deliverables,
+          turnaround: formattedTurnaround,
+          popular: formPopular,
+          cover_image: coverUrl,
+        });
+        setPackages((prev) => prev.map((p) => p.id === editingId ? updated : p));
+        if (onUpdatePackages) onUpdatePackages(packages.map((p) => p.id === editingId ? updated : p));
+        setEditingId(null);
+      } else {
+        const newPkg = await createPackage({
+          title: formTitle.trim(),
+          icon: formIcon || '🎥',
+          price: numericPrice,
+          duration: formDuration || '2 hours',
+          deliverables,
+          turnaround: formattedTurnaround,
+          popular: formPopular,
+          cover_image: coverUrl,
+        });
+        const updated = editingId
+          ? packages.map((p) => (p.id === editingId ? newPkg : p))
+          : [...packages, newPkg];
+        setPackages(updated);
+        if (onUpdatePackages) onUpdatePackages(updated);
+        setShowAddForm(false);
+        setEditingId(null);
+      }
+    } catch (err) {
+      console.error('Failed to save package:', err);
+      let errorMsg = 'An error occurred while saving the package.';
+      if (err?.response?.data) {
+        const data = err.response.data;
+        if (typeof data === 'string') {
+          errorMsg = data;
+        } else if (data.detail) {
+          errorMsg = data.detail;
+        } else if (typeof data === 'object') {
+          errorMsg = Object.entries(data)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+            .join(' | ');
+        }
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      alert(`Failed to save package: ${errorMsg}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeletePackage = async (id) => {
+    const confirmed = window.confirm('Delete this package?');
+    if (!confirmed) return;
+    const isRealDbId = id && (typeof id === 'number' || /^\d+$/.test(String(id)));
+    if (isRealDbId) {
+      await deletePackageApi(id);
+    }
     const updated = packages.filter((p) => p.id !== id);
     setPackages(updated);
     if (onUpdatePackages) onUpdatePackages(updated);
@@ -126,13 +203,9 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
   };
 
   const handleSaveAllChanges = () => {
-    if (onUpdatePackages) {
-      onUpdatePackages(packages);
-    }
+    if (onUpdatePackages) onUpdatePackages(packages);
     setSaveSuccess(true);
-    setTimeout(() => {
-      setSaveSuccess(false);
-    }, 3000);
+    setTimeout(() => setSaveSuccess(false), 3000);
   };
 
   return (
@@ -173,9 +246,10 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
             <button
               type="button"
               onClick={handleSaveAllChanges}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-indigo-600/30 transition-all cursor-pointer disabled:opacity-60"
+              disabled={saving}
             >
-              <Save className="w-4 h-4" />
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               <span>Save Changes</span>
             </button>
           </div>
@@ -279,47 +353,46 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
               type="file"
               ref={fileInputRef}
               accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files && e.target.files[0];
-                if (!file) return;
-                setIsUploading(true);
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                  setFormCoverImage(reader.result);
-                  setIsUploading(false);
-                };
-                reader.readAsDataURL(file);
-              }}
+              onChange={handleImageUpload}
               className="hidden"
             />
 
-            {/* Hidden File Input for Package Cover Upload */}
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files && e.target.files[0];
-                if (!file) return;
-                setIsUploading(true);
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                  setFormCoverImage(reader.result);
-                  setIsUploading(false);
-                };
-                reader.readAsDataURL(file);
-              }}
-              className="hidden"
-            />
+            {/* Package Cover Image with Presets and Upload */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold text-slate-700">Package Cover Image</label>
+                <span className="text-[10px] text-slate-400 font-medium">Choose a preset or upload your own</span>
+              </div>
 
-            {/* Clean Image Upload Only Box */}
-            <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-slate-700">Package Image</label>
+              {/* Preset selector pills */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {PRESET_COVER_IMAGES.map((preset) => (
+                  <button
+                    key={preset.url}
+                    type="button"
+                    onClick={() => setFormCoverImage(preset.url)}
+                    className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
+                      formCoverImage === preset.url
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Image Preview & Upload Box */}
               <div
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => !isUploading && fileInputRef.current?.click()}
                 className="relative w-full h-32 rounded-2xl overflow-hidden bg-slate-100 border-2 border-dashed border-indigo-200 hover:border-indigo-500 transition-all cursor-pointer group flex items-center justify-center"
               >
-                {formCoverImage ? (
+                {isUploading ? (
+                  <div className="flex flex-col items-center justify-center text-indigo-600 space-y-1">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="text-xs font-extrabold">Uploading to ImageKit…</span>
+                  </div>
+                ) : formCoverImage ? (
                   <>
                     <img
                       src={formCoverImage}
@@ -328,19 +401,13 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
                     />
                     <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white text-xs font-black">
                       <Camera className="w-4 h-4 text-white" />
-                      <span>Change Image</span>
+                      <span>Upload / Replace Custom Image</span>
                     </div>
                   </>
                 ) : (
                   <div className="flex flex-col items-center justify-center text-indigo-600 space-y-1">
-                    {isUploading ? (
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                    ) : (
-                      <>
-                        <Upload className="w-6 h-6 text-indigo-600" />
-                        <span className="text-xs font-extrabold text-indigo-600">Upload Package Image</span>
-                      </>
-                    )}
+                    <Upload className="w-6 h-6 text-indigo-600" />
+                    <span className="text-xs font-extrabold text-indigo-600">Upload Package Image</span>
                   </div>
                 )}
               </div>
@@ -390,6 +457,12 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
         )}
 
         {/* Shoot Packages Grid */}
+        {loadingPackages ? (
+          <div className="flex items-center justify-center py-20 gap-3 text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span className="text-sm font-bold">Loading packages…</span>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
           {packages.map((pkg) => (
             <div
@@ -474,6 +547,7 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

@@ -97,13 +97,25 @@ export default function BookingStatusView({
         {/* Booking Card Summary */}
         <div className="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-frambit-card space-y-3">
           <div className="flex items-center gap-3">
-            <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200/60">
-              <img
-                src={(userRole === 'creator' ? (currentBooking.client_avatar || currentBooking.shooter_avatar) : currentBooking.shooter_avatar) || null}
-                alt={userRole === 'creator' ? (currentBooking.client_name || 'Client') : (currentBooking.shooter_name || 'Creator')}
-                className="w-full h-full object-cover"
-              />
-            </div>
+            {(() => {
+              const rawImg = (userRole === 'creator' ? (currentBooking.client_avatar || currentBooking.shooter_avatar) : currentBooking.shooter_avatar) || currentBooking.shooter_avatar;
+              const targetName = userRole === 'creator' ? (currentBooking.client_name || 'Client') : (currentBooking.shooter_name || 'Creator');
+              const cleanImg = (typeof rawImg === 'string' && rawImg.trim() && !rawImg.includes('null') && !rawImg.includes('photo-1500648767791')) ? rawImg.trim() : null;
+              return (
+                <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-tr from-indigo-500 to-purple-600 shrink-0 border border-slate-200/60 flex items-center justify-center font-black text-white text-lg select-none">
+                  {cleanImg ? (
+                    <img
+                      src={cleanImg}
+                      alt={targetName}
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span>{(targetName || 'U').charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+              );
+            })()}
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-black text-slate-900 truncate">
                 {currentBooking.service || currentBooking.title || 'Reel Shoot'}
@@ -275,126 +287,104 @@ export default function BookingStatusView({
         )}
 
         {/* Vertical Progress Step Timeline Tracker */}
-        <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-frambit-card space-y-6">
-          <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Status Timeline</h3>
+        <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-frambit-card">
+          <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-5">Status Timeline</h3>
 
-          <div className="relative pl-6 space-y-6">
-            {/* Vertical connecting line */}
-            <div className="absolute left-2.5 top-2 bottom-2 w-0.5 bg-slate-200" />
+          {/* Steps */}
+          <div className="space-y-0">
 
-            {/* Step 1: Requested */}
-            <div className="relative flex items-start justify-between group">
-              <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center bg-purple-600 ring-4 ring-purple-100 text-white text-[10px]">
-                <CheckCircle2 className="w-3.5 h-3.5 fill-purple-600 text-white" />
-              </div>
-              <div>
-                <h4 className="text-xs font-black text-slate-900">Requested</h4>
-                <span className="text-[10px] text-slate-400 font-semibold block mt-0.5">
-                  {currentBooking.requested_at || 'Just now'}
-                </span>
-              </div>
-            </div>
+            {/* Helper to get step state */}
+            {(() => {
+              // Determine completed step index (0=none, 1=requested, 2=accepted/declined, 3=in_progress, 4=completed)
+              const stepIndex = isCompleted ? 4 : isInProgress ? 3 : isConfirmed ? 2 : isDeclined || isCancelled ? -1 : 1;
 
-            {/* Step 2: Creator Acceptance State */}
-            {isConfirmed ? (
-              <div className="relative flex items-start justify-between group">
-                <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center bg-purple-600 ring-4 ring-purple-100 text-white text-[10px]">
-                  <CheckCircle2 className="w-3.5 h-3.5 fill-purple-600 text-white" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-slate-900">Accepted</h4>
-                  <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">
-                    {currentBooking.accepted_at || 'Accepted by creator'}
-                  </span>
-                </div>
-              </div>
-            ) : isDeclined ? (
-              <div className="relative flex items-start justify-between group">
-                <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center bg-rose-600 ring-4 ring-rose-100 text-white text-[10px]">
-                  <X className="w-3.5 h-3.5 text-white" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-rose-700">Declined</h4>
-                  <span className="text-[10px] text-rose-500 font-bold block mt-0.5">
-                    {currentBooking.declined_at || 'Creator declined request'}
-                  </span>
-                </div>
-              </div>
-            ) : isCancelled ? (
-              <div className="relative flex items-start justify-between group">
-                <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center bg-slate-500 ring-4 ring-slate-100 text-white text-[10px]">
-                  <X className="w-3.5 h-3.5 text-white" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-slate-600">Cancelled</h4>
-                  <span className="text-[10px] text-slate-400 font-semibold block mt-0.5">
-                    Request cancelled
-                  </span>
-                </div>
-              </div>
-            ) : (
-              /* Pending State: Awaiting creator accept/reject */
-              <div className="relative flex items-start justify-between group">
-                <div className="absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center bg-amber-100 border border-amber-300 ring-4 ring-amber-50 text-amber-600 text-[10px]">
-                  <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-amber-800">
-                    Accepted
-                  </h4>
-                  <span className="text-[10px] text-amber-600 font-bold block mt-0.5">
-                    Waiting for creator confirmation
-                  </span>
-                </div>
-              </div>
-            )}
+              const steps = [
+                {
+                  label: 'Requested',
+                  sublabel: currentBooking.requested_at || 'Just now',
+                  done: true,
+                  active: false,
+                  color: 'purple',
+                },
+                {
+                  label: isConfirmed ? 'Accepted' : isDeclined ? 'Declined' : isCancelled ? 'Cancelled' : 'Awaiting Confirmation',
+                  sublabel: isConfirmed
+                    ? (currentBooking.accepted_at || 'Accepted by creator')
+                    : isDeclined
+                    ? (currentBooking.declined_at || 'Creator declined request')
+                    : isCancelled
+                    ? 'Request cancelled by client'
+                    : 'Waiting for creator to accept',
+                  done: isConfirmed || isDeclined || isCancelled,
+                  active: isPending,
+                  rejected: isDeclined || isCancelled,
+                  color: isDeclined ? 'rose' : isCancelled ? 'slate' : 'purple',
+                },
+                {
+                  label: 'In Progress',
+                  sublabel: isCompleted ? 'Shoot was in progress' : isInProgress ? 'Shoot in progress' : null,
+                  done: isInProgress || isCompleted,
+                  active: false,
+                  color: 'purple',
+                },
+                {
+                  label: 'Completed',
+                  sublabel: isCompleted ? (currentBooking.completed_at || 'Shoot completed successfully') : null,
+                  done: isCompleted,
+                  active: false,
+                  color: 'purple',
+                },
+              ];
 
-            {/* Step 3: In Progress */}
-            <div className="relative flex items-start justify-between group">
-              <div
-                className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] ${
-                  isInProgress
-                    ? 'bg-purple-600 ring-4 ring-purple-100'
-                    : 'bg-slate-200 border-2 border-white'
-                }`}
-              >
-                {isInProgress && <CheckCircle2 className="w-3.5 h-3.5 fill-purple-600 text-white" />}
-              </div>
-              <div>
-                <h4 className={`text-xs font-black ${isInProgress ? 'text-slate-900' : 'text-slate-400'}`}>
-                  In Progress
-                </h4>
-                {isInProgress && (
-                  <span className="text-[10px] text-purple-600 font-bold block mt-0.5">
-                    Shoot in progress
-                  </span>
-                )}
-              </div>
-            </div>
+              return steps.map((step, idx) => {
+                const isLast = idx === steps.length - 1;
+                const lineActive = idx < stepIndex - 1 || (idx === 0 && stepIndex >= 2);
 
-            {/* Step 4: Completed */}
-            <div className="relative flex items-start justify-between group">
-              <div
-                className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] ${
-                  isCompleted
-                    ? 'bg-purple-600 ring-4 ring-purple-100'
-                    : 'bg-slate-200 border-2 border-white'
-                }`}
-              >
-                {isCompleted && <CheckCircle2 className="w-3.5 h-3.5 fill-purple-600 text-white" />}
-              </div>
-              <div>
-                <h4 className={`text-xs font-black ${isCompleted ? 'text-slate-900' : 'text-slate-400'}`}>
-                  Completed
-                </h4>
-                {isCompleted && (
-                  <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                    {currentBooking.completed_at || 'Shoot completed'}
-                  </span>
-                )}
-              </div>
-            </div>
+                let dotClasses = 'bg-slate-200 border-2 border-slate-300';
+                let iconEl = null;
 
+                if (step.done && !step.rejected) {
+                  dotClasses = 'bg-purple-600 ring-4 ring-purple-100';
+                  iconEl = <CheckCircle2 className="w-3.5 h-3.5 fill-purple-600 text-white" />;
+                } else if (step.done && step.rejected) {
+                  dotClasses = step.color === 'rose'
+                    ? 'bg-rose-600 ring-4 ring-rose-100'
+                    : 'bg-slate-500 ring-4 ring-slate-100';
+                  iconEl = <X className="w-3.5 h-3.5 text-white" />;
+                } else if (step.active) {
+                  dotClasses = 'bg-amber-100 border-2 border-amber-400 ring-4 ring-amber-50';
+                  iconEl = <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />;
+                }
+
+                let titleClass = 'text-xs font-black text-slate-400';
+                let subClass = 'text-[10px] font-semibold text-slate-400';
+                if (step.done && !step.rejected) { titleClass = 'text-xs font-black text-slate-900'; subClass = 'text-[10px] font-bold text-emerald-600'; }
+                if (step.done && step.rejected && step.color === 'rose') { titleClass = 'text-xs font-black text-rose-700'; subClass = 'text-[10px] font-bold text-rose-500'; }
+                if (step.done && step.rejected && step.color === 'slate') { titleClass = 'text-xs font-black text-slate-600'; subClass = 'text-[10px] font-semibold text-slate-400'; }
+                if (step.active) { titleClass = 'text-xs font-black text-amber-800'; subClass = 'text-[10px] font-bold text-amber-600'; }
+
+                return (
+                  <div key={idx} className="relative flex items-start gap-4">
+                    {/* Left column: dot + line */}
+                    <div className="flex flex-col items-center shrink-0">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center z-10 ${dotClasses}`}>
+                        {iconEl}
+                      </div>
+                      {!isLast && (
+                        <div className={`w-0.5 flex-1 min-h-[28px] mt-1 mb-1 ${lineActive ? 'bg-purple-400' : 'bg-slate-200'}`} />
+                      )}
+                    </div>
+                    {/* Right column: text */}
+                    <div className={`pb-${isLast ? '0' : '4'} min-w-0`}>
+                      <h4 className={titleClass}>{step.label}</h4>
+                      {step.sublabel && (
+                        <span className={`${subClass} block mt-0.5`}>{step.sublabel}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
 

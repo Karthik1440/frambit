@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ArrowLeft, Share2, Heart, Star, MapPin, Camera, Smartphone, Sparkles, Sliders, CheckCircle, Video, Play, Award, Globe, Calendar, ChevronLeft, ChevronRight, Package, MessageSquare, Check } from 'lucide-react';
-import { CATEGORY_LABELS, fetchShooterById, fetchReviewsApi } from '../api';
+import { CATEGORY_LABELS, fetchShooterById, fetchReviewsApi, deduplicateReviews } from '../api';
 import { useAuth } from '../context/AuthContext';
 
 const InstagramIcon = ({ className = "w-4 h-4" }) => (
@@ -29,10 +29,10 @@ export default function ShooterProfileView({
       const stored = localStorage.getItem('frambit_reviews');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return deduplicateReviews(parsed);
       }
     } catch (e) {}
-    return Array.isArray(reviewsProp) ? reviewsProp : [];
+    return Array.isArray(reviewsProp) ? deduplicateReviews(reviewsProp) : [];
   });
 
   useEffect(() => {
@@ -46,12 +46,7 @@ export default function ShooterProfileView({
       // Also fetch reviews for this creator from backend API
       fetchReviewsApi(shooterProp.id).then((apiReviews) => {
         if (Array.isArray(apiReviews)) {
-          setReviews((prev) => {
-            const map = new Map();
-            prev.forEach((r) => map.set(String(r.id), r));
-            apiReviews.forEach((r) => map.set(String(r.id), r));
-            return Array.from(map.values());
-          });
+          setReviews((prev) => deduplicateReviews([...apiReviews, ...prev]));
         }
       });
     }
@@ -59,12 +54,7 @@ export default function ShooterProfileView({
 
   useEffect(() => {
     if (Array.isArray(reviewsProp) && reviewsProp.length > 0) {
-      setReviews((prev) => {
-        const map = new Map();
-        prev.forEach((r) => map.set(String(r.id), r));
-        reviewsProp.forEach((r) => map.set(String(r.id), r));
-        return Array.from(map.values());
-      });
+      setReviews((prev) => deduplicateReviews([...reviewsProp, ...prev]));
     }
   }, [reviewsProp]);
 
@@ -110,16 +100,19 @@ export default function ShooterProfileView({
 
   if (!shooter) return null;
 
-  // Filter verified reviews for this specific creator
+  // Filter verified reviews for this specific creator and ensure deduplicated
   const currentShooterId = String(shooter.id || '');
-  const creatorReviews = reviews.filter((r) => {
-    if (!r) return false;
-    const rShooterId = String(r.shooter_id || r.shooter || '');
-    if (rShooterId && currentShooterId) {
-      return rShooterId === currentShooterId;
-    }
-    return false;
-  });
+  const creatorReviews = useMemo(() => {
+    const matched = reviews.filter((r) => {
+      if (!r) return false;
+      const rShooterId = String(r.shooter_id || r.shooter || r.shooterId || '');
+      if (rShooterId && currentShooterId) {
+        return rShooterId === currentShooterId;
+      }
+      return false;
+    });
+    return deduplicateReviews(matched);
+  }, [reviews, currentShooterId]);
 
   // Calculate live average rating and review count in real-time
   const liveReviewCount = creatorReviews.length > 0
@@ -136,6 +129,14 @@ export default function ShooterProfileView({
     const pct = creatorReviews.length > 0 ? Math.round((count / creatorReviews.length) * 100) : (star === 5 ? 100 : 0);
     return { star, count, pct };
   });
+
+  const displayPackages = (Array.isArray(shooter?.packages) && shooter.packages.length > 0)
+    ? shooter.packages
+    : (Array.isArray(shooter?.packages_list) && shooter.packages_list.length > 0 ? shooter.packages_list : []);
+
+  const displayPortfolio = (Array.isArray(shooter?.portfolio) && shooter.portfolio.length > 0)
+    ? shooter.portfolio
+    : (Array.isArray(shooter?.portfolio_photos) && shooter.portfolio_photos.length > 0 ? shooter.portfolio_photos : []);
 
   const rawEquipment = Array.isArray(shooter.equipment)
     ? shooter.equipment
@@ -256,18 +257,28 @@ export default function ShooterProfileView({
                       <span>{shooter.area ? `${shooter.area}, ${shooter.city || 'Bengaluru'}` : (shooter.city || 'Bengaluru')} • {shooter.distance_km || 5} km</span>
                     </div>
 
-                    {shooter.instagram_handle && (
-                      <a
-                        href={`https://instagram.com/${shooter.instagram_handle.replace(/^@/, '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-purple-600 via-pink-500 to-amber-500 text-white text-xs font-extrabold rounded-full shadow-xs hover:shadow-md transition-all hover:scale-102 cursor-pointer"
-                        title="View Instagram Profile"
-                      >
-                        <InstagramIcon className="w-3.5 h-3.5 text-white" />
-                        <span>@{shooter.instagram_handle.replace(/^@/, '')}</span>
-                      </a>
-                    )}
+                    {(() => {
+                      const raw = shooter.instagram_handle || shooter.instagram || shooter.instagram_id || '';
+                      const clean = String(raw)
+                        .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
+                        .replace(/^@/, '')
+                        .replace(/\/+$/, '')
+                        .trim();
+                      if (!clean) return null;
+                      return (
+                        <a
+                          id="creator-instagram-link"
+                          href={`https://instagram.com/${clean}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-purple-600 via-pink-500 to-amber-500 text-white text-xs font-extrabold rounded-full shadow-xs hover:shadow-md transition-all hover:scale-105 cursor-pointer"
+                          title={`View @${clean} on Instagram`}
+                        >
+                          <InstagramIcon className="w-3.5 h-3.5 text-white" />
+                          <span>@{clean}</span>
+                        </a>
+                      );
+                    })()}
                   </div>
 
                   {/* Price Rate */}
@@ -407,7 +418,7 @@ export default function ShooterProfileView({
                       )}
 
                       {/* Scroll arrows when in horizontal view */}
-                      {!showAllPackages && shooter?.packages && shooter.packages.length > 1 && (
+                      {!showAllPackages && displayPackages && displayPackages.length > 1 && (
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
@@ -440,7 +451,7 @@ export default function ShooterProfileView({
                     </div>
                   </div>
 
-                  {shooter?.packages && shooter.packages.length > 0 ? (
+                  {displayPackages && displayPackages.length > 0 ? (
                     <div
                       ref={packagesScrollRef}
                       className={
@@ -449,7 +460,7 @@ export default function ShooterProfileView({
                           : "flex items-stretch gap-4 overflow-x-auto pb-3 pt-1 scroll-smooth snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none"
                       }
                     >
-                      {shooter.packages.map((pkg) => (
+                      {displayPackages.map((pkg) => (
                         <div
                           key={pkg.id || pkg.title}
                           onClick={() => {
@@ -465,11 +476,28 @@ export default function ShooterProfileView({
                         >
                           {/* Top Cover Image Banner with Popular Badge Overlay */}
                           <div className="relative h-32 w-full bg-slate-900 overflow-hidden shrink-0">
-                            <img
-                              src={pkg.cover_image || shooter.cover_image || null}
-                              alt={pkg.title}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                            />
+                            {pkg.cover_image || shooter.cover_image || shooter.avatar ? (
+                              <img
+                                src={pkg.cover_image || shooter.cover_image || shooter.avatar}
+                                alt={pkg.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              />
+                            ) : (
+                              <div className={`w-full h-full flex flex-col items-center justify-center gap-1.5
+                                ${ {'reel_shooter':'bg-gradient-to-br from-indigo-600 to-purple-700',
+                                    'photographer':'bg-gradient-to-br from-emerald-500 to-teal-700',
+                                    'video_editor':'bg-gradient-to-br from-rose-500 to-pink-700',
+                                    'drone_pilot':'bg-gradient-to-br from-violet-600 to-indigo-800',
+                                    'makeup_artist':'bg-gradient-to-br from-amber-500 to-orange-600',
+                                    'stylist':'bg-gradient-to-br from-sky-500 to-cyan-700',
+                                    'content_creator':'bg-gradient-to-br from-yellow-500 to-amber-600',
+                                    'model':'bg-gradient-to-br from-fuchsia-500 to-pink-700',
+                                   }[shooter.category] || 'bg-gradient-to-br from-slate-700 to-slate-900'
+                                }`}>
+                                <span className="text-3xl leading-none select-none">{pkg.icon || '🎥'}</span>
+                                <span className="text-white text-[11px] font-extrabold tracking-wide opacity-80 px-3 text-center leading-snug">{pkg.title}</span>
+                              </div>
+                            )}
                             <div className="absolute inset-0 bg-slate-950/20" />
                             {pkg.popular && (
                               <span className="absolute top-3 left-3 bg-indigo-600/95 backdrop-blur-md text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full shadow-md flex items-center gap-1 border border-white/20">
@@ -787,9 +815,9 @@ export default function ShooterProfileView({
                     </button>
                   </div>
 
-                  {shooter?.portfolio && shooter.portfolio.length > 0 ? (
+                  {displayPortfolio && displayPortfolio.length > 0 ? (
                     <div className="grid grid-cols-2 gap-3">
-                      {shooter.portfolio.slice(0, 6).map((item) => (
+                      {displayPortfolio.slice(0, 6).map((item) => (
                         <div
                           key={item.id || item.title}
                           onClick={() => onNavigate('portfolio')}

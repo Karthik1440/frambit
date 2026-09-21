@@ -150,11 +150,25 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
                 className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
               >
                 <div className="flex items-start sm:items-center gap-4 min-w-0">
-                  <img
-                    src={(userRole === 'creator' ? item.client_avatar : item.shooter_avatar) || item.shooter_avatar || null}
-                    alt={userRole === 'creator' ? (item.client_name || 'Client') : (item.shooter_name || 'Creator')}
-                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover shrink-0 shadow-2xs border border-slate-200/60 mt-0.5 sm:mt-0"
-                  />
+                  {(() => {
+                    const rawImg = (userRole === 'creator' ? item.client_avatar : item.shooter_avatar) || item.shooter_avatar;
+                    const targetName = userRole === 'creator' ? (item.client_name || 'Client') : (item.shooter_name || 'Creator');
+                    const cleanImg = (typeof rawImg === 'string' && rawImg.trim() && !rawImg.includes('null') && !rawImg.includes('photo-1500648767791')) ? rawImg.trim() : null;
+                    return (
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden shrink-0 shadow-2xs border border-slate-200/60 mt-0.5 sm:mt-0 bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-black text-white text-lg select-none">
+                        {cleanImg ? (
+                          <img
+                            src={cleanImg}
+                            alt={targetName}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span>{(targetName || 'U').charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div className="min-w-0 space-y-1.5 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm sm:text-base font-black text-slate-900 truncate">
@@ -190,19 +204,35 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
                       </p>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDetailsBooking(item);
-                      }}
-                      className="text-xs font-extrabold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1 cursor-pointer pt-0.5"
-                      title="View Booking Details (Number, Location, Brief)"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>View Details</span>
-                      <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                    </button>
+                    <div className="flex items-center gap-3 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDetailsBooking(item);
+                        }}
+                        className="text-xs font-extrabold text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="View Booking Details (Number, Location, Brief)"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Details</span>
+                      </button>
+                      <span className="text-slate-300 text-xs">|</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onSelectBooking) onSelectBooking(item);
+                          onNavigate('booking_status');
+                        }}
+                        className="text-xs font-extrabold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="View Status Timeline"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>View Timeline</span>
+                        <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -357,11 +387,25 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
               <div className="p-5 overflow-y-auto space-y-4 text-xs">
                 {/* Service & Client summary */}
                 <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
-                  <img
-                    src={(userRole === 'creator' ? detailsBooking.client_avatar : detailsBooking.shooter_avatar) || detailsBooking.shooter_avatar || null}
-                    alt={userRole === 'creator' ? (detailsBooking.client_name || 'Client') : (detailsBooking.shooter_name || 'Creator')}
-                    className="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200"
-                  />
+                  {(() => {
+                    const rawImg = (userRole === 'creator' ? detailsBooking.client_avatar : detailsBooking.shooter_avatar) || detailsBooking.shooter_avatar;
+                    const targetName = userRole === 'creator' ? (detailsBooking.client_name || 'Client') : (detailsBooking.shooter_name || 'Creator');
+                    const cleanImg = (typeof rawImg === 'string' && rawImg.trim() && !rawImg.includes('null') && !rawImg.includes('photo-1500648767791')) ? rawImg.trim() : null;
+                    return (
+                      <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-black text-white text-sm select-none">
+                        {cleanImg ? (
+                          <img
+                            src={cleanImg}
+                            alt={targetName}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span>{(targetName || 'U').charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-black text-slate-900 truncate">{detailsBooking.service || 'Reel Shoot'}</h4>

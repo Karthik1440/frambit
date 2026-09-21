@@ -91,10 +91,31 @@ export async function getOrCreateConversation(currentUser, targetPerson, booking
   const chatId = getChatId(myId, targetId);
 
   const myName = activeUser.displayName || activeUser.name || (activeUser.email ? activeUser.email.split('@')[0] : 'User');
-  const myAvatar = activeUser.photoURL || activeUser.avatar || null;
+  let myAvatar = activeUser.photoURL || activeUser.avatar || null;
+  if (!myAvatar && activeUser.email) {
+    try {
+      const stored = localStorage.getItem(`user_profile_${activeUser.email.toLowerCase().trim()}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.avatar) myAvatar = parsed.avatar;
+      }
+    } catch (e) {}
+  }
+  if (!myAvatar) {
+    myAvatar = localStorage.getItem('frambit_active_avatar') || null;
+  }
   
   const targetName = target.display_name || target.name || 'Creator';
-  const targetAvatar = target.avatar || target.profile_image || null;
+  let targetAvatar = target.avatar || target.profile_image || null;
+  if (!targetAvatar && target.email) {
+    try {
+      const stored = localStorage.getItem(`user_profile_${target.email.toLowerCase().trim()}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.avatar) targetAvatar = parsed.avatar;
+      }
+    } catch (e) {}
+  }
 
   const clientAliases = [
     activeUser.uid,
@@ -312,7 +333,7 @@ export function subscribeToMessages(chatId, onUpdate) {
 /**
  * Sends a message in a conversation.
  */
-export async function sendChatMessage(chatId, { text, senderId, senderName, senderRole, images = [] }) {
+export async function sendChatMessage(chatId, { text, senderId, senderName, senderRole, senderAvatar = null, images = [] }) {
   if (!chatId || (!text?.trim() && images.length === 0)) return null;
 
   const now = new Date();
@@ -341,12 +362,15 @@ export async function sendChatMessage(chatId, { text, senderId, senderName, send
   const chatIdx = localChats.findIndex((c) => c.id === chatId);
   const nextUnread = (localChats[chatIdx]?.unread_count || 0) + 1;
   if (chatIdx >= 0) {
+    const isClientSender = senderRole === 'client' || senderRole === 'user';
     localChats[chatIdx] = {
       ...localChats[chatIdx],
       last_message: text.trim() || 'Sent an attachment',
       last_message_time: timeStr,
       timestamp,
       unread_count: nextUnread,
+      ...(senderAvatar && isClientSender ? { client_avatar: senderAvatar } : {}),
+      ...(senderAvatar && !isClientSender ? { shooter_avatar: senderAvatar } : {}),
     };
     saveLocalChats(localChats);
   }
@@ -362,14 +386,22 @@ export async function sendChatMessage(chatId, { text, senderId, senderName, send
     console.log('✅ [ChatService] Message written to Firestore:', msgRef.id, '| chatId:', chatId);
 
     const chatDocRef = doc(db, 'chats', chatId);
-    await setDoc(chatDocRef, {
+    const chatUpdates = {
       last_message: text.trim() || 'Sent an attachment',
       last_message_time: timeStr,
       timestamp,
       unread_count: nextUnread,
       last_sender_id: String(senderId || 'guest'),
       updated_at: serverTimestamp(),
-    }, { merge: true });
+    };
+    if (senderAvatar) {
+      if (senderRole === 'client' || senderRole === 'user') {
+        chatUpdates.client_avatar = senderAvatar;
+      } else {
+        chatUpdates.shooter_avatar = senderAvatar;
+      }
+    }
+    await setDoc(chatDocRef, chatUpdates, { merge: true });
     console.log('✅ [ChatService] Chat metadata updated in Firestore');
   } catch (err) {
     console.error('❌ [ChatService] Firestore WRITE BLOCKED — sendChatMessage:', err.message);
@@ -378,6 +410,98 @@ export async function sendChatMessage(chatId, { text, senderId, senderName, send
   }
 
   return messagePayload;
+}
+
+/**
+ * Real-time sync: Updates user avatar across all active chat conversations in Firestore & local cache.
+ * When a client or creator changes their profile picture, this propagates to all their chats in real time,
+ * triggering onSnapshot on the other participant's device instantly.
+ */
+export async function syncUserAvatarToChats(emailOrUid, newAvatar, role = 'client', displayName = null) {
+  if (!emailOrUid) return;
+  const cleanId = String(emailOrUid).toLowerCase().trim();
+  const avatarUrl = (newAvatar && typeof newAvatar === 'string') ? newAvatar.trim() : null;
+
+  // 1. Update local cache immediately
+  const localList = getLocalChats();
+  let localChanged = false;
+  localList.forEach((chat) => {
+    const isClient = (chat.client_email && chat.client_email.toLowerCase().trim() === cleanId) ||
+                     (chat.client_id && String(chat.client_id).toLowerCase().trim() === cleanId);
+    const isShooter = (chat.shooter_email && chat.shooter_email.toLowerCase().trim() === cleanId) ||
+                      (chat.shooter_id && String(chat.shooter_id).toLowerCase().trim() === cleanId);
+
+    if (isClient) {
+      chat.client_avatar = avatarUrl;
+      if (displayName) chat.client_name = displayName;
+      localChanged = true;
+    }
+    if (isShooter) {
+      chat.shooter_avatar = avatarUrl;
+      if (displayName) chat.shooter_name = displayName;
+      localChanged = true;
+    }
+  });
+  if (localChanged) {
+    saveLocalChats(localList);
+  }
+
+  // 2. Query and update all matching Firestore chat documents
+  try {
+    await ensureFirebaseAuth();
+    const chatsRef = collection(db, 'chats');
+    const updatePromises = [];
+
+    // Query client chats
+    try {
+      const q1 = query(chatsRef, where('client_email', '==', cleanId));
+      const snap1 = await getDocs(q1);
+      snap1.forEach((docSnap) => {
+        const updateData = { client_avatar: avatarUrl, updated_at: serverTimestamp() };
+        if (displayName) updateData.client_name = displayName;
+        updatePromises.push(setDoc(doc(db, 'chats', docSnap.id), updateData, { merge: true }));
+      });
+    } catch (e) {}
+
+    // Query shooter chats
+    try {
+      const q2 = query(chatsRef, where('shooter_email', '==', cleanId));
+      const snap2 = await getDocs(q2);
+      snap2.forEach((docSnap) => {
+        const updateData = { shooter_avatar: avatarUrl, updated_at: serverTimestamp() };
+        if (displayName) updateData.shooter_name = displayName;
+        updatePromises.push(setDoc(doc(db, 'chats', docSnap.id), updateData, { merge: true }));
+      });
+    } catch (e) {}
+
+    // Fallback: scan all chats if specific queries had 0 matches
+    if (updatePromises.length === 0) {
+      try {
+        const allSnap = await getDocs(chatsRef);
+        allSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          const isCl = (data.client_email && data.client_email.toLowerCase().trim() === cleanId) ||
+                       (data.client_id && String(data.client_id).toLowerCase().trim() === cleanId);
+          const isSh = (data.shooter_email && data.shooter_email.toLowerCase().trim() === cleanId) ||
+                       (data.shooter_id && String(data.shooter_id).toLowerCase().trim() === cleanId);
+          if (isCl) {
+            const upd = { client_avatar: avatarUrl, updated_at: serverTimestamp() };
+            if (displayName) upd.client_name = displayName;
+            updatePromises.push(setDoc(doc(db, 'chats', docSnap.id), upd, { merge: true }));
+          } else if (isSh) {
+            const upd = { shooter_avatar: avatarUrl, updated_at: serverTimestamp() };
+            if (displayName) upd.shooter_name = displayName;
+            updatePromises.push(setDoc(doc(db, 'chats', docSnap.id), upd, { merge: true }));
+          }
+        });
+      } catch (e) {}
+    }
+
+    await Promise.all(updatePromises);
+    console.log(`✅ [ChatService] Propagated avatar update to ${updatePromises.length} chats in Firestore`);
+  } catch (err) {
+    console.warn('Sync avatar to Firestore chats note:', err.message);
+  }
 }
 
 /**
@@ -528,19 +652,42 @@ export function getChatPartner(chat, currentUser, userData, userRole) {
     isCurrentShooter = false;
   }
 
+  const sanitizeAvatar = (av) => {
+    if (!av || typeof av !== 'string') return null;
+    const clean = av.trim();
+    if (!clean || clean === 'null' || clean === 'undefined' || clean.includes('photo-1500648767791')) return null;
+    return clean;
+  };
+
   if (isCurrentShooter) {
     // Current user is the creator -> show client info
+    const rawClientAv = chat.client_avatar || chat.customer_avatar || chat.clientAvatar;
+    let finalClientAv = sanitizeAvatar(rawClientAv);
+
+    // If missing from chat document, check cached user profile by client email
+    if (!finalClientAv && chat.client_email) {
+      try {
+        const stored = localStorage.getItem(`user_profile_${chat.client_email.toLowerCase().trim()}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.avatar) finalClientAv = sanitizeAvatar(parsed.avatar);
+        }
+      } catch (e) {}
+    }
+
     return {
-      name: chat.client_name || 'Client',
-      avatar: chat.client_avatar || null,
+      name: chat.client_name || chat.customer_name || 'Client',
+      avatar: finalClientAv,
       role: 'Client',
     };
   }
 
   // Current user is client -> show creator/shooter info
+  const rawShooterAv = chat.shooter_avatar || chat.shooterAvatar;
+  let finalShooterAv = sanitizeAvatar(rawShooterAv);
   return {
     name: chat.shooter_name || 'Creator',
-    avatar: chat.shooter_avatar || null,
+    avatar: finalShooterAv,
     role: 'Creator',
   };
 }

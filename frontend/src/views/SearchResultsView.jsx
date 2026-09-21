@@ -138,7 +138,16 @@ export default function SearchResultsView({
       result = result.filter((s) => s.is_verified);
     }
 
-    return result;
+    // Deduplicate by shooter ID to guarantee unique keys
+    const dedupeMap = new Map();
+    result.forEach((s, idx) => {
+      const key = s && (s.id !== undefined && s.id !== null) ? String(s.id) : `idx-${idx}`;
+      if (!dedupeMap.has(key)) {
+        dedupeMap.set(key, s);
+      }
+    });
+
+    return Array.from(dedupeMap.values());
   }, [shooters, selectedCategory, searchTerm, activeFilter]);
 
   return (
@@ -284,13 +293,13 @@ export default function SearchResultsView({
         {/* Creator Cards Grid (Exact design match to screenshot) */}
         {filteredShooters.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
-            {filteredShooters.map((shooter) => {
+            {filteredShooters.map((shooter, idx) => {
               const isSaved = savedIds.some((id) => String(id) === String(shooter.id));
               const styles = (Array.isArray(shooter.shooting_styles) ? shooter.shooting_styles : []).filter(s => typeof s === 'string' && s.trim().length > 0);
 
               return (
                 <div
-                  key={shooter.id}
+                  key={shooter.id ? `search-shooter-${shooter.id}` : `search-idx-${idx}`}
                   onClick={() => {
                     onSelectShooter(shooter);
                     onNavigate('shooter_profile');

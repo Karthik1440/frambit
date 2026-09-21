@@ -159,13 +159,23 @@ export default function HomeView({
   const topRatedCreators = useMemo(() => {
     const liveList = Array.isArray(shooters) ? [...shooters] : [];
 
+    // Deduplicate by ID to guarantee 100% key uniqueness
+    const dedupeMap = new Map();
+    liveList.forEach((s, idx) => {
+      const key = s && (s.id !== undefined && s.id !== null) ? String(s.id) : `idx-${idx}`;
+      if (!dedupeMap.has(key)) {
+        dedupeMap.set(key, s);
+      }
+    });
+    const uniqueList = Array.from(dedupeMap.values());
+
     if (creatorFilter === 'nearest') {
-      liveList.sort((a, b) => getShooterDistance(a) - getShooterDistance(b));
+      uniqueList.sort((a, b) => getShooterDistance(a) - getShooterDistance(b));
     } else {
-      liveList.sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
+      uniqueList.sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0));
     }
 
-    return liveList.slice(0, 8);
+    return uniqueList.slice(0, 8);
   }, [shooters, creatorFilter]);
 
   const categoryScrollRef = useRef(null);
@@ -456,9 +466,9 @@ export default function HomeView({
 
           {/* Grid Layout (Exact match to user reference: 4 cols on desktop, 2 on tablet, 1 on mobile) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {topRatedCreators.map((creator) => (
+            {topRatedCreators.map((creator, idx) => (
               <CreatorCard
-                key={creator.id}
+                key={creator.id ? `top-creator-${creator.id}` : `top-creator-idx-${idx}`}
                 shooter={creator}
                 isSaved={savedIds.some((id) => String(id) === String(creator.id))}
                 onToggleSave={handleToggleSave}

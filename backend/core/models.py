@@ -118,6 +118,13 @@ class ShooterProfile(models.Model):
         blank=True,
     )
 
+    instagram_handle = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="Instagram handle without @ or full URL",
+    )
+
     experience_years = models.PositiveIntegerField(default=0)
 
     hourly_price = models.DecimalField(
@@ -169,6 +176,82 @@ class ShooterProfile(models.Model):
 
     def __str__(self):
         return self.display_name
+
+
+class Package(models.Model):
+    """
+    Normalized package/service offering for a ShooterProfile.
+    Replaces the legacy `packages` JSONField on ShooterProfile.
+    """
+
+    shooter = models.ForeignKey(
+        ShooterProfile,
+        on_delete=models.CASCADE,
+        related_name="packages_set",
+    )
+
+    title = models.CharField(max_length=150, help_text="Package name, e.g. 'Instagram Reel Package'")
+
+    icon = models.CharField(
+        max_length=10,
+        default="🎥",
+        help_text="Emoji icon for this package",
+    )
+
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        help_text="Price in INR",
+    )
+
+    duration = models.CharField(
+        max_length=100,
+        blank=True,
+        default="2 hours",
+        help_text="e.g. '2 hours shoot' or '60 minutes'",
+    )
+
+    deliverables = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of deliverable strings e.g. ['5 edited photos', '1 reel']",
+    )
+
+    turnaround = models.CharField(
+        max_length=100,
+        blank=True,
+        default="Delivery: 3 days",
+        help_text="e.g. 'Delivery: 3 days'",
+    )
+
+    cover_image = models.URLField(
+        max_length=800,
+        blank=True,
+        default="",
+        help_text="ImageKit URL for the package cover image",
+    )
+
+    popular = models.BooleanField(
+        default=False,
+        help_text="Mark as a featured / most popular package",
+    )
+
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Lower number = shown first",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "price"]
+        verbose_name = "Package"
+        verbose_name_plural = "Packages"
+
+    def __str__(self):
+        return f"{self.shooter.display_name} — {self.title} (₹{self.price})"
 
 
 class PortfolioPhoto(models.Model):

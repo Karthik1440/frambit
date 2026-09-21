@@ -23,6 +23,7 @@ export default function ChatConversationView({ chat, onNavigate, onOpenBookingDe
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [headerImgError, setHeaderImgError] = useState(false);
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -43,7 +44,8 @@ export default function ChatConversationView({ chat, onNavigate, onOpenBookingDe
 
   // Subscribe to real-time Firebase messages & mark as read
   useEffect(() => {
-    if (!chatId || !isLoggedIn) return;
+    if (!isLoggedIn || !chatId) return;
+
     markChatAsRead(chatId);
     const unsubscribe = subscribeToMessages(chatId, (newMsgs) => {
       setMessages(newMsgs || []);
@@ -84,6 +86,7 @@ export default function ChatConversationView({ chat, onNavigate, onOpenBookingDe
         senderId: currentUserId,
         senderName: currentUserName,
         senderRole: currentUserRole,
+        senderAvatar: userData?.avatar || currentUser?.photoURL || localStorage.getItem('frambit_active_avatar') || null,
         images: imageToSend ? [imageToSend] : [],
       });
     } catch (err) {
@@ -206,12 +209,17 @@ export default function ChatConversationView({ chat, onNavigate, onOpenBookingDe
               <ArrowLeft className="w-5 h-5" />
             </button>
             
-            <div className="relative w-10 h-10 rounded-2xl overflow-hidden bg-slate-100 shrink-0 border border-slate-100">
-              <img
-                src={partnerAvatar}
-                alt={partnerName}
-                className="w-full h-full object-cover"
-              />
+            <div className="relative w-10 h-10 rounded-2xl overflow-hidden bg-gradient-to-tr from-indigo-500 to-purple-600 shrink-0 border border-slate-100 flex items-center justify-center font-black text-white text-sm shadow-2xs select-none">
+              {partnerAvatar && !headerImgError ? (
+                <img
+                  src={partnerAvatar}
+                  alt={partnerName}
+                  onError={() => setHeaderImgError(true)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span>{(partnerName || 'U').charAt(0).toUpperCase()}</span>
+              )}
               <span className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
             </div>
 

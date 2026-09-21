@@ -1,48 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
 import {
   ArrowLeft, Plus, Edit2, Trash2, Save,
-  Eye, MapPin, X, Check, Sparkles, Camera, Image as ImageIcon,
+  Eye, MapPin, X, Check, Sparkles, Camera, Image as ImageIcon, Loader2,
 } from 'lucide-react';
+import { api, fetchPortfolioPhotos } from '../api';
 
 const CATEGORIES = [
   'Fashion', 'Portrait', 'Travel', 'Food & Lifestyle',
   'Fitness', 'Product', 'Wedding', 'Commercial', 'Other',
 ];
 
-// Compress & resize image to base64 (max 800px, 0.80 quality)
-function compressImage(file, maxPx = 800, quality = 0.8) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.onerror = reject;
-      img.src = e.target.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly = false, onNavigate, onUpdateVideos }) {
-  const [items, setItems] = useState(
-    Array.isArray(videos) && videos.length > 0 ? videos : []
-  );
+  const [items, setItems] = useState([]);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
 
+  // Load portfolio photos from API on mount / when shooter changes
   useEffect(() => {
-    if (Array.isArray(videos)) {
+    if (shooter?.id) {
+      setLoadingPhotos(true);
+      fetchPortfolioPhotos(shooter.id)
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setItems(data);
+          } else if (Array.isArray(videos) && videos.length > 0) {
+            // Fallback to the prop if API returns empty (legacy JSON portfolio)
+            setItems(videos.filter((v) => v.image_url && !v.image_url.startsWith('data:')));
+          }
+        })
+        .catch(() => {
+          if (Array.isArray(videos)) setItems(videos);
+        })
+        .finally(() => setLoadingPhotos(false));
+    } else if (Array.isArray(videos)) {
       setItems(videos);
     }
-  }, [videos]);
+  }, [shooter?.id]);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -54,7 +48,8 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Fashion');
   const [location, setLocation] = useState('');
-  const [imageDataUrl, setImageDataUrl] = useState('');
+  const [imageDataUrl, setImageDataUrl] = useState('');  // preview URL (object URL)
+  const [imageFile, setImageFile] = useState(null);      // raw File for upload
 
   const fileInputRef = useRef(null);
 
@@ -63,6 +58,7 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
     setCategory('Fashion');
     setLocation('');
     setImageDataUrl('');
+    setImageFile(null);
     setEditingId(null);
     setShowAddForm(false);
   };
@@ -95,23 +91,19 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
       alert('Please select an image file (JPG, PNG, WEBP).');
       return;
     }
-    setUploading(true);
-    try {
-      const compressed = await compressImage(file);
-      setImageDataUrl(compressed);
-    } catch (err) {
-      alert('Failed to process image. Please try another file.');
-    }
-    setUploading(false);
-    // Reset file input so same file can be re-picked
+    // Store the raw File object — will be uploaded to ImageKit on save
+    setImageFile(file);
+    // Show a local object URL as preview (not base64, not stored)
+    const preview = URL.createObjectURL(file);
+    setImageDataUrl(preview);
     e.target.value = '';
   };
 
-  const handleSaveItem = (e) => {
+  const handleSaveItem = async (e) => {
     e.preventDefault();
     if (isReadOnly) return;
     if (!title.trim()) return;
-    if (!imageDataUrl) {
+    if (!imageDataUrl && !editingId) {
       alert('Please upload a photo first.');
       return;
     }
@@ -120,32 +112,61 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
       return;
     }
 
-    if (editingId) {
-      const updated = items.map((item) =>
-        item.id === editingId
-          ? { ...item, title: title.trim(), category, location, image_url: imageDataUrl }
-          : item
-      );
-      setItems(updated);
-      if (onUpdateVideos) onUpdateVideos(updated);
-      resetForm();
-    } else {
-      const newItem = {
-        id: Date.now(),
-        title: title.trim(),
-        category,
-        location,
-        image_url: imageDataUrl,
-      };
-      const updated = [newItem, ...items];
-      setItems(updated);
-      if (onUpdateVideos) onUpdateVideos(updated);
-      resetForm();
+    setUploading(true);
+    try {
+      if (editingId) {
+        // Update metadata only (title, category, location) via PATCH
+        const res = await api.patch(`/portfolio-photos/${editingId}/`, {
+          title: title.trim(),
+          category: category.toLowerCase().replace(/[^a-z]/g, '_').replace(/_+/g, '_'),
+          location,
+        });
+        setItems((prev) => prev.map((item) => item.id === editingId ? res.data : item));
+        if (onUpdateVideos) onUpdateVideos(items.map((item) => item.id === editingId ? res.data : item));
+        resetForm();
+      } else {
+        // 1. Upload file to ImageKit via Django proxy
+        const formData = new FormData();
+        formData.append('file', imageFile);
+        formData.append('file_name', `portfolio_${Date.now()}_${imageFile.name}`);
+        formData.append('folder', '/portfolio');
+        formData.append('use_unique_file_name', 'true');
+        const uploadRes = await api.post('/media/upload/', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        const imageUrl = uploadRes.data?.url;
+        if (!imageUrl) throw new Error('ImageKit did not return a URL.');
+
+        // 2. Save PortfolioPhoto record in DB
+        const catSlug = category.toLowerCase().replace(/[\s&]/g, '_').replace(/_+/g, '_');
+        const photoRes = await api.post('/portfolio-photos/', {
+          title: title.trim(),
+          category: catSlug,
+          image_url: imageUrl,
+          location,
+          is_public: true,
+        });
+        const newItem = photoRes.data;
+        const updated = [newItem, ...items];
+        setItems(updated);
+        if (onUpdateVideos) onUpdateVideos(updated);
+        resetForm();
+      }
+    } catch (err) {
+      console.error('Portfolio save error:', err);
+      alert(`Save failed: ${err?.response?.data?.detail || err.message}`);
+    } finally {
+      setUploading(false);
     }
   };
 
-  const handleDeleteItem = (id) => {
+  const handleDeleteItem = async (id) => {
     if (isReadOnly) return;
+    try {
+      await api.delete(`/portfolio-photos/${id}/`);
+    } catch (err) {
+      console.warn('Delete portfolio photo API error (removing from UI anyway):', err.message);
+    }
     const updated = items.filter((item) => item.id !== id);
     setItems(updated);
     if (onUpdateVideos) onUpdateVideos(updated);
@@ -248,8 +269,8 @@ export default function PortfolioPhotosView({ videos = [], shooter, isReadOnly =
               >
                 {uploading ? (
                   <div className="flex flex-col items-center gap-2 py-10">
-                    <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-xs font-bold text-slate-400">Processing…</span>
+                    <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+                    <span className="text-xs font-bold text-slate-400">Uploading to ImageKit…</span>
                   </div>
                 ) : imageDataUrl ? (
                   <>

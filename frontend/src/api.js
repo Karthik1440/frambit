@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { auth } from './firebase';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/+$/, '');
 
@@ -8,6 +9,26 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Request interceptor to attach Firebase ID token
+api.interceptors.request.use(
+  async (config) => {
+    try {
+      let token = localStorage.getItem('firebase_id_token');
+      if (auth?.currentUser) {
+        token = await auth.currentUser.getIdToken();
+        localStorage.setItem('firebase_id_token', token);
+      }
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (err) {
+      console.debug('Failed to get Firebase token:', err);
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 export const POPULAR_CITIES = [
   { id: 'bengaluru', name: 'Bengaluru', area: 'Indiranagar', lat: 12.9716, lng: 77.5946 },
@@ -56,7 +77,6 @@ export const CATEGORY_LABELS = {
   all: 'All Creators',
 };
 
-// Real Backend API Service Calls (Django REST API endpoints)
 export async function fetchShooters(params = {}) {
   try {
     const res = await api.get('/shooters/', { params });
@@ -89,6 +109,42 @@ export async function fetchBanners() {
   }
 }
 
+/**
+ * Look up user role and creator details from Django DB by email.
+ * Returns { email, role, is_creator, shooter_id, display_name, ... }
+ */
+export async function fetchUserRole(email) {
+  if (!email) return null;
+  try {
+    const res = await api.get('/users/role/', { params: { email: email.trim().toLowerCase() } });
+    return res.data;
+  } catch (err) {
+    console.warn('Backend fetchUserRole fallback:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Syncs any user's profile (including client/customer profile picture) to Django DB.
+ */
+export async function syncUserProfile(profileData) {
+  if (!profileData?.email) return null;
+  try {
+    const payload = {
+      email: profileData.email.trim().toLowerCase(),
+      display_name: profileData.display_name || profileData.name || '',
+      avatar: profileData.avatar || profileData.avatar_url || profileData.profile_image || '',
+      phone: profileData.phone || '',
+      city: profileData.city || '',
+      role: profileData.role || 'user',
+    };
+    const res = await api.post('/users/sync/', payload);
+    return res.data;
+  } catch (err) {
+    console.warn('Backend syncUserProfile fallback:', err.message);
+    return null;
+  }
+}
 
 /**
  * Syncs creator profile to Django DB so ALL clients can discover them.
@@ -105,6 +161,10 @@ export async function syncCreatorProfile(profileData) {
       hourly_price: Number(profileData.hourly_price) || 0,
       phone: profileData.phone || '',
       category: profileData.category || '',
+      instagram_handle: (profileData.instagram_handle || profileData.instagram || profileData.instagram_id || '')
+        .toString()
+        .replace(/^@/, '')
+        .trim(),
       avatar_url: typeof profileData.avatar === 'string' && profileData.avatar.length < 500
         ? profileData.avatar : '',
       equipment: Array.isArray(profileData.equipment)
@@ -217,5 +277,116 @@ export async function submitReviewApi(payload) {
   } catch (err) {
     console.warn('Backend submitReviewApi fallback:', err.message);
     return null;
+  }
+}
+
+/**
+ * Universal review deduplication:
+ * Guarantees no duplicate review cards are shown even if reviews arrive
+ * from multiple sources (localStorage, synthetic booking review, or backend API).
+ */
+export function deduplicateReviews(reviewsList) {
+  if (!Array.isArray(reviewsList)) return [];
+
+  const unique = [];
+
+  for (const rev of reviewsList) {
+    if (!rev) continue;
+
+    const revId = String(rev.id || '');
+    const bookingVal = rev.booking_id || rev.booking;
+    const cleanBookingId = bookingVal ? String(bookingVal).replace(/^BK-/, '').trim() : null;
+
+    const shooterId = String(rev.shooter_id || rev.shooter || rev.shooterId || '');
+    const clientName = (rev.customer_name || rev.client_name || rev.name || rev.clientName || '').trim().toLowerCase();
+    const comment = (rev.comment || '').trim().toLowerCase();
+
+    const existingIndex = unique.findIndex((existing) => {
+      // 1. Exact ID match
+      if (revId && String(existing.id) === revId) return true;
+
+      // 2. Same booking ID (a booking can only have one review)
+      if (cleanBookingId) {
+        const existingBookingVal = existing.booking_id || existing.booking;
+        const cleanExistingBooking = existingBookingVal ? String(existingBookingVal).replace(/^BK-/, '').trim() : null;
+        if (cleanExistingBooking && cleanExistingBooking === cleanBookingId) {
+          return true;
+        }
+      }
+
+      // 3. Same content signature (same shooter + same comment + same reviewer)
+      const existingShooterId = String(existing.shooter_id || existing.shooter || existing.shooterId || '');
+      const existingComment = (existing.comment || '').trim().toLowerCase();
+      const existingClientName = (existing.customer_name || existing.client_name || existing.name || existing.clientName || '').trim().toLowerCase();
+
+      if (comment && existingComment && comment === existingComment) {
+        const shooterMatches = !shooterId || !existingShooterId || shooterId === existingShooterId;
+        const nameMatches = !clientName || !existingClientName || clientName === existingClientName;
+        if (shooterMatches && nameMatches) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+
+    if (existingIndex === -1) {
+      unique.push(rev);
+    } else {
+      const existing = unique[existingIndex];
+      // Prefer real backend integer ID over synthetic local IDs
+      const revIsNumeric = typeof rev.id === 'number' || (!isNaN(Number(rev.id)) && !String(rev.id).startsWith('rev-'));
+      const existingIsNumeric = typeof existing.id === 'number' || (!isNaN(Number(existing.id)) && !String(existing.id).startsWith('rev-'));
+
+      if (revIsNumeric && !existingIsNumeric) {
+        unique[existingIndex] = { ...existing, ...rev };
+      } else {
+        unique[existingIndex] = { ...rev, ...existing };
+      }
+    }
+  }
+
+  return unique;
+}
+
+// ── Package API functions (normalized Package model) ──
+
+export async function fetchPackages(shooterId) {
+  try {
+    const res = await api.get('/packages/', { params: { shooter: shooterId } });
+    return Array.isArray(res.data) ? res.data : (res.data?.results || []);
+  } catch (err) {
+    console.warn('Backend fetchPackages fallback:', err.message);
+    return [];
+  }
+}
+
+export async function createPackage(payload) {
+  try {
+    const res = await api.post('/packages/', payload);
+    return res.data;
+  } catch (err) {
+    console.warn('Backend createPackage fallback:', err.message);
+    throw err;
+  }
+}
+
+export async function updatePackage(packageId, payload) {
+  try {
+    const res = await api.patch(`/packages/${packageId}/`, payload);
+    return res.data;
+  } catch (err) {
+    console.warn(`Backend updatePackage (${packageId}) fallback:`, err.message);
+    throw err;
+  }
+}
+
+export async function deletePackageApi(packageId) {
+  try {
+    await api.delete(`/packages/${packageId}/`);
+    return true;
+  } catch (err) {
+    console.warn(`Backend deletePackage (${packageId}) fallback:`, err.message);
+    return false;
   }
 }

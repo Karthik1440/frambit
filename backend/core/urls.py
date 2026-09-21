@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     CreatorCategoryViewSet,
     CreatorSyncView,
+    PackageViewSet,
     ShooterViewSet,
     PortfolioPhotoViewSet,
     AvailabilityViewSet,
@@ -14,11 +15,14 @@ from .views import (
     PromotionalBannerViewSet,
     ImageKitAuthView,
     ImageKitUploadView,
+    UserRoleLookupView,
+    UserSyncView,
 )
 
 router = DefaultRouter()
 router.register(r"categories", CreatorCategoryViewSet, basename="creatorcategory")
 router.register(r"shooters", ShooterViewSet, basename="shooter")
+router.register(r"packages", PackageViewSet, basename="package")
 router.register(r"portfolio-photos", PortfolioPhotoViewSet, basename="portfoliophoto")
 router.register(r"availability", AvailabilityViewSet, basename="availability")
 router.register(r"bookings", BookingViewSet, basename="booking")
@@ -29,6 +33,8 @@ router.register(r"banners", PromotionalBannerViewSet, basename="promotionalbanne
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("users/role/", UserRoleLookupView.as_view(), name="user-role-lookup"),
+    path("users/sync/", UserSyncView.as_view(), name="user-sync"),
     path("creators/sync/", CreatorSyncView.as_view(), name="creator-sync"),
     path("media/imagekit-auth/", ImageKitAuthView.as_view(), name="imagekit-auth"),
     path("media/upload/", ImageKitUploadView.as_view(), name="media-upload"),

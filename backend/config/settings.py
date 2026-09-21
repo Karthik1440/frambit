@@ -56,6 +56,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.firebase_auth.FirebaseAuthMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -108,12 +109,24 @@ def get_database_config():
     if DATABASE_URL:
         try:
             import dj_database_url
-            return dj_database_url.parse(
-                DATABASE_URL,
-                conn_max_age=600,
-                conn_health_checks=True,
-                ssl_require=True,
-            )
+            parsed = urlparse(DATABASE_URL)
+            is_local = parsed.hostname in ['localhost', '127.0.0.1', None]
+            has_sslmode = 'sslmode=' in (parsed.query or '')
+            ssl_req = False if is_local else True
+
+            if has_sslmode:
+                return dj_database_url.parse(
+                    DATABASE_URL,
+                    conn_max_age=600,
+                    conn_health_checks=True,
+                )
+            else:
+                return dj_database_url.parse(
+                    DATABASE_URL,
+                    conn_max_age=600,
+                    conn_health_checks=True,
+                    ssl_require=ssl_req,
+                )
         except Exception:
             parsed = urlparse(DATABASE_URL)
             return {
@@ -124,21 +137,33 @@ def get_database_config():
                 'HOST': parsed.hostname or '',
                 'PORT': str(parsed.port or 5432),
                 'OPTIONS': {
-                    'sslmode': 'require',
+                    'sslmode': 'require' if parsed.hostname not in ['localhost', '127.0.0.1', None] else 'disable',
                 },
                 'CONN_MAX_AGE': 600,
                 'CONN_HEALTH_CHECKS': True,
             }
+
+    # Fallback to individual PostgreSQL environment variables (if provided)
+    pg_host = os.environ.get('PGHOST') or os.environ.get('POSTGRES_HOST')
+    if pg_host:
+        return {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('PGDATABASE') or os.environ.get('POSTGRES_DB', 'frambit'),
+            'USER': os.environ.get('PGUSER') or os.environ.get('POSTGRES_USER', 'frambit_user'),
+            'PASSWORD': os.environ.get('PGPASSWORD') or os.environ.get('POSTGRES_PASSWORD', ''),
+            'HOST': pg_host,
+            'PORT': str(os.environ.get('PGPORT') or os.environ.get('POSTGRES_PORT', '5432')),
+            'OPTIONS': {
+                'sslmode': 'require' if pg_host not in ['localhost', '127.0.0.1'] else 'disable',
+            },
+            'CONN_MAX_AGE': 600,
+            'CONN_HEALTH_CHECKS': True,
+        }
+
+    # --- Local development fallback: use SQLite when no PostgreSQL is configured ---
     return {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('PGDATABASE', 'neondb'),
-        'USER': os.environ.get('PGUSER', ''),
-        'PASSWORD': os.environ.get('PGPASSWORD', ''),
-        'HOST': os.environ.get('PGHOST', ''),
-        'PORT': os.environ.get('PGPORT', '5432'),
-        'OPTIONS': {
-            'sslmode': 'require',
-        },
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 
 DATABASES = {
@@ -205,5 +230,23 @@ MEDIA_ROOT = BASE_DIR / 'media'
 IMAGEKIT_PUBLIC_KEY = os.environ.get("IMAGEKIT_PUBLIC_KEY", "")
 IMAGEKIT_PRIVATE_KEY = os.environ.get("IMAGEKIT_PRIVATE_KEY", "")
 IMAGEKIT_URL_ENDPOINT = os.environ.get("IMAGEKIT_URL_ENDPOINT", "https://ik.imagekit.io/your_imagekit_id")
+
+# Django REST Framework Configuration
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'core.firebase_auth.FirebaseAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '120/minute',
+        'user': '600/minute',
+        'upload': '20/minute',
+        'sync': '30/minute',
+    },
+}
 
 

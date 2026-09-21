@@ -3,7 +3,7 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import Footer from './components/Footer';
 import { AuthProvider, useAuth, saveStoredUserProfile } from './context/AuthContext';
-import { CATEGORY_LABELS, fetchShooters, fetchShooterById, syncCreatorProfile, fetchBookings, createBooking, updateBookingStatusApi, deleteBooking, matchesBookingId, fetchReviewsApi } from './api';
+import { CATEGORY_LABELS, fetchShooters, fetchShooterById, syncCreatorProfile, fetchBookings, createBooking, updateBookingStatusApi, deleteBooking, matchesBookingId, fetchReviewsApi, deduplicateReviews } from './api';
 
 import { detectCurrentCity } from './utils/location';
 
@@ -42,7 +42,7 @@ import ServicesPricingView from './views/ServicesPricingView';
 import BlueprintCanvasView from './views/BlueprintCanvasView';
 
 function MainApp() {
-  const { currentUser, userRole, userData, setUserData } = useAuth();
+  const { currentUser, userRole, setUserRole, userData, setUserData } = useAuth();
   const [currentScreen, setCurrentScreen] = useState('home');
   const [selectedCategory, setSelectedCategory] = useState('reel_shooter');
   const [postAuthRedirect, setPostAuthRedirect] = useState(null);
@@ -69,9 +69,14 @@ function MainApp() {
       saveStoredUserProfile(userData.email, newProfile);
       syncCreatorProfile(newProfile).catch(() => {});
     }
+    const myEmail = (userData?.email || '').toLowerCase();
     setSelectedShooter((prev) => ({ ...prev, packages: updatedPackages }));
     setShooters((prev) =>
-      prev.map((s) => (s.id === selectedShooter?.id || s.id === activeCreator?.id ? { ...s, packages: updatedPackages } : s))
+      prev.map((s) => (
+        (myEmail && s.email && s.email.toLowerCase() === myEmail) || (userData?.id && s.id === userData.id)
+          ? { ...s, packages: updatedPackages }
+          : s
+      ))
     );
   };
 
@@ -83,9 +88,14 @@ function MainApp() {
       saveStoredUserProfile(userData.email, newProfile);
       syncCreatorProfile(newProfile).catch(() => {});
     }
+    const myEmail = (userData?.email || '').toLowerCase();
     setSelectedShooter((prev) => ({ ...prev, portfolio: updatedPortfolio }));
     setShooters((prev) =>
-      prev.map((s) => (s.id === selectedShooter?.id || s.id === activeCreator?.id ? { ...s, portfolio: updatedPortfolio } : s))
+      prev.map((s) => (
+        (myEmail && s.email && s.email.toLowerCase() === myEmail) || (userData?.id && s.id === userData.id)
+          ? { ...s, portfolio: updatedPortfolio }
+          : s
+      ))
     );
   };
 
@@ -99,6 +109,20 @@ function MainApp() {
           localStorage.removeItem(key);
         }
       });
+      // Deduplicate any persisted shooters by ID
+      const stored = localStorage.getItem('frambit_shooters');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const map = new Map();
+          parsed.forEach((s) => {
+            if (s && s.id !== undefined && s.id !== null) {
+              map.set(String(s.id), s);
+            }
+          });
+          localStorage.setItem('frambit_shooters', JSON.stringify(Array.from(map.values())));
+        }
+      }
     } catch (e) {}
 
     // Fetch real Django backend creators from API (Source of Truth)
@@ -110,25 +134,46 @@ function MainApp() {
           return Array.from(map.values());
         });
 
-        // If logged-in creator matches a backend profile, sync up-to-date packages to userData
-        if (userData && userData.email) {
+        // If logged-in user matches a backend shooter profile, ensure creator role and sync data
+        const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
+        if (activeEmail) {
           const myBackend = backendShooters.find(
-            (b) => b.email && b.email.toLowerCase() === userData.email.toLowerCase()
+            (b) => b.email && b.email.toLowerCase() === activeEmail
           );
-          if (myBackend && Array.isArray(myBackend.packages) && myBackend.packages.length > 0) {
+          if (myBackend) {
+            if (userRole !== 'creator' && setUserRole) {
+              setUserRole('creator');
+            }
             const updatedProfile = {
-              ...userData,
-              packages: myBackend.packages,
+              ...(userData || {}),
+              role: 'creator',
+              id: myBackend.id,
+              display_name: myBackend.display_name || userData?.display_name || 'Creator',
+              name: myBackend.display_name || userData?.name || 'Creator',
+              city: myBackend.city || userData?.city || 'Bengaluru',
+              area: myBackend.area || userData?.area || '',
+              bio: myBackend.bio || userData?.bio || '',
+              category: myBackend.category || userData?.category || 'reel_shooter',
+              hourly_price: myBackend.hourly_price || userData?.hourly_price || 799,
+              packages: Array.isArray(myBackend.packages) && myBackend.packages.length > 0
+                ? myBackend.packages
+                : (userData?.packages || []),
               portfolio: Array.isArray(myBackend.portfolio) && myBackend.portfolio.length > 0
                 ? myBackend.portfolio
-                : (userData.portfolio || [])
+                : (userData?.portfolio || [])
             };
             if (setUserData) setUserData(updatedProfile);
-            saveStoredUserProfile(userData.email, updatedProfile);
+            saveStoredUserProfile(activeEmail, updatedProfile);
+            localStorage.setItem(`user_role_${activeEmail}`, 'creator');
+            localStorage.setItem('active_user_session', JSON.stringify({ email: activeEmail, role: 'creator' }));
           }
         }
 
         setSelectedShooter((current) => {
+          if (activeEmail) {
+            const myBackend = backendShooters.find((b) => b.email && b.email.toLowerCase() === activeEmail.toLowerCase());
+            if (myBackend) return myBackend;
+          }
           if (!current) return backendShooters[0] || null;
           const matched = backendShooters.find((b) => b.id === current.id || (current.email && b.email === current.email));
           return matched || backendShooters[0] || null;
@@ -231,16 +276,16 @@ function MainApp() {
       const stored = localStorage.getItem('frambit_reviews');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return deduplicateReviews(parsed);
       }
     } catch (e) {}
     return [];
   });
 
-  // Persist reviews to localStorage
+  // Persist deduplicated reviews to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('frambit_reviews', JSON.stringify(reviews));
+      localStorage.setItem('frambit_reviews', JSON.stringify(deduplicateReviews(reviews)));
     } catch (e) {}
   }, [reviews]);
 
@@ -272,14 +317,7 @@ function MainApp() {
   useEffect(() => {
     fetchReviewsApi().then((apiReviews) => {
       if (Array.isArray(apiReviews) && apiReviews.length > 0) {
-        setReviews((prev) => {
-          const map = new Map();
-          prev.forEach((r) => map.set(String(r.id), r));
-          apiReviews.forEach((r) => {
-            if (!map.has(String(r.id))) map.set(String(r.id), r);
-          });
-          return Array.from(map.values());
-        });
+        setReviews((prev) => deduplicateReviews([...apiReviews, ...prev]));
       }
     });
   }, []);
@@ -291,11 +329,13 @@ function MainApp() {
         .filter((b) => b && (b.client_review || b.review))
         .map((b) => {
           const cr = b.client_review || b.review;
+          const cleanBkId = b.rawId || (typeof b.id === 'string' && b.id.startsWith('BK-') ? b.id.replace('BK-', '') : b.id);
           return {
-            id: `rev-bk-${b.id}`,
-            booking: b.id,
-            shooter: b.shooter_id,
-            shooter_id: b.shooter_id,
+            id: cr.id || `rev-bk-${cleanBkId}`,
+            booking: cleanBkId,
+            booking_id: cleanBkId,
+            shooter: b.shooter_id || b.shooter,
+            shooter_id: b.shooter_id || b.shooter,
             customer_name: b.client_name || b.customer_name || 'Client',
             customer_avatar: b.customer_avatar || null,
             rating: cr.rating || 5,
@@ -304,14 +344,7 @@ function MainApp() {
           };
         });
       if (bookingReviews.length > 0) {
-        setReviews((prev) => {
-          const map = new Map();
-          prev.forEach((r) => map.set(String(r.id), r));
-          bookingReviews.forEach((r) => {
-            if (!map.has(String(r.id))) map.set(String(r.id), r);
-          });
-          return Array.from(map.values());
-        });
+        setReviews((prev) => deduplicateReviews([...prev, ...bookingReviews]));
       }
     }
   }, [bookings]);
@@ -436,19 +469,22 @@ function MainApp() {
       );
 
       setSelectedShooter((prev) => {
+        const cleanMerged = {};
+        Object.keys(mergedFields).forEach((key) => {
+          if (mergedFields[key] !== undefined && mergedFields[key] !== null) {
+            cleanMerged[key] = mergedFields[key];
+          }
+        });
+        if (userRole === 'creator') {
+          return { ...(prev || {}), ...cleanMerged };
+        }
         if (prev && userData.email && prev.email && prev.email.toLowerCase() === userData.email.toLowerCase()) {
-          const cleanMerged = {};
-          Object.keys(mergedFields).forEach((key) => {
-            if (mergedFields[key] !== undefined && mergedFields[key] !== null) {
-              cleanMerged[key] = mergedFields[key];
-            }
-          });
           return { ...prev, ...cleanMerged };
         }
         return prev;
       });
     }
-  }, [userData]);
+  }, [userData, userRole]);
 
   const handleSelectShooter = (shooter) => {
     setSelectedShooter(shooter);
@@ -464,14 +500,7 @@ function MainApp() {
       });
       fetchReviewsApi(shooter.id).then((freshReviews) => {
         if (Array.isArray(freshReviews) && freshReviews.length > 0) {
-          setReviews((prev) => {
-            const map = new Map();
-            freshReviews.forEach((r) => map.set(String(r.id), r));
-            prev.forEach((r) => {
-              if (!map.has(String(r.id))) map.set(String(r.id), r);
-            });
-            return Array.from(map.values());
-          });
+          setReviews((prev) => deduplicateReviews([...freshReviews, ...prev]));
         }
       });
     }
@@ -519,6 +548,7 @@ function MainApp() {
       image: creatorImg,
       client_name: userData?.display_name || userData?.name || 'Client',
       client_email: userData?.email || '',
+      client_avatar: userData?.avatar || currentUser?.photoURL || localStorage.getItem('frambit_active_avatar') || null,
       client_type: 'Client',
       date: slotData.date || '20 Sep 2026',
       time: slotData.time || '4:00 PM - 6:00 PM',
@@ -540,6 +570,7 @@ function MainApp() {
       shooter: selectedShooter?.id,
       client_name: userData?.display_name || userData?.name || 'Client',
       client_email: userData?.email || '',
+      client_avatar: userData?.avatar || currentUser?.photoURL || localStorage.getItem('frambit_active_avatar') || undefined,
       location: slotData.location || `${currentLocation}, Karnataka`,
       notes: packageTitle,
       phone_number: slotData.phone_number || '',
@@ -686,7 +717,7 @@ function MainApp() {
       participants: Array.from(new Set([...clientAliases, ...creatorAliases])),
       client_id: String(myId),
       client_name: activeUser?.displayName || userData?.name || 'Client',
-      client_avatar: activeUser?.photoURL || userData?.avatar || null,
+      client_avatar: activeUser?.photoURL || userData?.avatar || localStorage.getItem('frambit_active_avatar') || null,
       client_email: activeUser.email || userData?.email || '',
       shooter_id: String(targetId),
       shooter_name: target.display_name || target.name || 'Creator',
@@ -782,6 +813,7 @@ function MainApp() {
       bio: userData?.bio || '',
       city: userData?.city || 'Bengaluru',
       area: userData?.area || '',
+      instagram_handle: userData?.instagram_handle || userData?.instagram || backendMatch?.instagram_handle || '',
       equipment: userData?.equipment || '',
       shooting_styles: userData?.shooting_styles || [],
     };
@@ -799,7 +831,7 @@ function MainApp() {
     if (!shooters || shooters.length === 0) {
       return [];
     }
-    return shooters.map((s) => {
+    const rawList = shooters.map((s) => {
       // ONLY merge active creator if logged in as creator and emails match
       if (isCreator && userData?.email && s.email && s.email.toLowerCase() === userData.email.toLowerCase()) {
         return {
@@ -807,6 +839,7 @@ function MainApp() {
           ...userData,
           display_name: userData.display_name || userData.name || s.display_name,
           name: userData.display_name || userData.name || s.name || s.display_name,
+          instagram_handle: userData.instagram_handle || s.instagram_handle || '',
           packages: Array.isArray(s.packages) && s.packages.length > 0
             ? s.packages
             : (Array.isArray(userData.packages) && userData.packages.length > 0 ? userData.packages : []),
@@ -817,19 +850,28 @@ function MainApp() {
       }
       return s;
     });
+
+    // Deduplicate by shooter ID to guarantee key uniqueness
+    const dedupeMap = new Map();
+    rawList.forEach((s) => {
+      if (s && s.id !== undefined && s.id !== null) {
+        const idKey = String(s.id);
+        if (!dedupeMap.has(idKey)) {
+          dedupeMap.set(idKey, s);
+        } else {
+          dedupeMap.set(idKey, { ...dedupeMap.get(idKey), ...s });
+        }
+      }
+    });
+    return Array.from(dedupeMap.values());
   }, [shooters, userData, activeCreator, userRole]);
 
   const currentShooterForView = useMemo(() => {
     if (userRole === 'creator') {
-      if (!selectedShooter || (userData?.email && selectedShooter.email && selectedShooter.email.toLowerCase() === userData.email.toLowerCase())) {
-        return {
-          ...selectedShooter,
-          ...activeCreator,
-        };
-      }
+      return activeCreator;
     }
     return selectedShooter || syncedShooters[0] || null;
-  }, [selectedShooter, activeCreator, userData, userRole, syncedShooters]);
+  }, [selectedShooter, activeCreator, userRole, syncedShooters]);
 
   return (
     <div className="h-[100dvh] md:h-auto md:min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans relative overflow-hidden md:overflow-visible">
@@ -1045,13 +1087,10 @@ function MainApp() {
         {/* Portfolio View (Works for both Creator managing their portfolio, and Client viewing creator's portfolio) */}
         {currentScreen === 'portfolio' && (
           <PortfolioVideosView
-            key={`portfolio-${currentShooterForView?.id || 'active'}-${(currentShooterForView?.portfolio || []).length}`}
-            videos={currentShooterForView?.portfolio || []}
-            shooter={currentShooterForView}
-            isReadOnly={
-              userRole !== 'creator' ||
-              (Boolean(userData?.email) && Boolean(currentShooterForView?.email) && userData.email.toLowerCase() !== currentShooterForView.email.toLowerCase() && String(currentShooterForView?.id) !== String(activeCreator?.id))
-            }
+            key={`portfolio-${userRole === 'creator' ? (activeCreator?.id || 'active') : (currentShooterForView?.id || 'view')}-${((userRole === 'creator' ? activeCreator : currentShooterForView)?.portfolio || []).length}`}
+            videos={(userRole === 'creator' ? activeCreator : currentShooterForView)?.portfolio || []}
+            shooter={userRole === 'creator' ? activeCreator : currentShooterForView}
+            isReadOnly={userRole !== 'creator'}
             onUpdateVideos={handleUpdatePortfolio}
             onNavigate={(screen) => setCurrentScreen(screen)}
           />
@@ -1064,16 +1103,20 @@ function MainApp() {
             onNavigate={(screen) => setCurrentScreen(screen)}
             onUpdatePackages={handleUpdatePackages}
             onUpdateShooter={(updatedShooter) => {
-              const targetId = updatedShooter.id || 1;
+              const targetId = updatedShooter.id || activeCreator?.id || 1;
               const cleanShooter = { ...updatedShooter, id: targetId };
               setSelectedShooter(cleanShooter);
-              setShooters((prev) =>
-                prev.map((s, idx) =>
-                  (s.id === targetId || idx === 0 || (cleanShooter.email && s.email === cleanShooter.email))
-                    ? { ...s, ...cleanShooter }
-                    : s
-                )
-              );
+              setShooters((prev) => {
+                const map = new Map();
+                prev.forEach((s) => {
+                  if (String(s.id) === String(targetId) || (cleanShooter.email && s.email && s.email.toLowerCase() === cleanShooter.email.toLowerCase())) {
+                    map.set(String(targetId), { ...s, ...cleanShooter, id: targetId });
+                  } else {
+                    map.set(String(s.id), s);
+                  }
+                });
+                return Array.from(map.values());
+              });
             }}
           />
         )}
@@ -1092,6 +1135,7 @@ function MainApp() {
         {currentScreen === 'creator_login' && (
           <AuthModalView
             initialMode="login"
+            initialRole="creator"
             onNavigate={(screen) => setCurrentScreen(screen)}
           />
         )}
@@ -1143,14 +1187,14 @@ function MainApp() {
                 created_at: reviewData.created_at || new Date().toISOString(),
               };
 
-              // Immediately prepend to reviews state
-              setReviews((prev) => [newReviewItem, ...prev.filter((r) => String(r.id) !== String(newReviewItem.id))]);
+              // Immediately prepend to reviews state with deduplication
+              setReviews((prev) => deduplicateReviews([newReviewItem, ...prev]));
 
               // Update booking status with is_reviewed and reviewData
               if (bookingId) {
                 handleUpdateBookingStatus(bookingId, 'Completed', {
                   is_reviewed: true,
-                  client_review: reviewData,
+                  client_review: { ...reviewData, id: newReviewItem.id },
                 });
               }
 
@@ -1195,12 +1239,7 @@ function MainApp() {
               });
               fetchReviewsApi().then((apiReviews) => {
                 if (Array.isArray(apiReviews) && apiReviews.length > 0) {
-                  setReviews((prev) => {
-                    const map = new Map();
-                    prev.forEach((r) => map.set(String(r.id), r));
-                    apiReviews.forEach((r) => map.set(String(r.id), r));
-                    return Array.from(map.values());
-                  });
+                  setReviews((prev) => deduplicateReviews([...apiReviews, ...prev]));
                 }
               });
             }}
