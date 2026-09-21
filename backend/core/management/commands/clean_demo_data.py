@@ -24,6 +24,7 @@ class Command(BaseCommand):
             "rohan@frambit.com",
             "ananya.editor@frambit.com",
             "ananya@frambit.com",
+            "yy@gmail.com",
         ]
 
         demo_users = User.objects.filter(

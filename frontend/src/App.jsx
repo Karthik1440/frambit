@@ -102,7 +102,7 @@ function MainApp() {
   // Purge any lingering old cached demo data from localStorage on app load
   useEffect(() => {
     try {
-      const demoKeys = ['aarav', 'priya', 'rohan', 'ananya', 'dhanush', '@frambit.com', 'example.com'];
+      const demoKeys = ['aarav', 'priya', 'rohan', 'ananya', 'dhanush', 'yy@gmail.com', '@frambit.com', 'example.com'];
       ['frambit_shooters', 'frambit_active_creator_profile', 'frambit_active_avatar', 'frambit_bookings', 'frambit_reviews'].forEach((key) => {
         const item = localStorage.getItem(key);
         if (item && demoKeys.some((dk) => item.toLowerCase().includes(dk))) {
@@ -117,7 +117,7 @@ function MainApp() {
         const realShooters = backendShooters.filter(s => {
           const email = (s.email || '').toLowerCase();
           const name = (s.display_name || s.name || '').toLowerCase();
-          return !email.includes('@frambit.com') && !email.includes('example.com') && !name.includes('dhanush') && !name.includes('priya') && !name.includes('rohan') && !name.includes('ananya');
+          return !email.includes('@frambit.com') && !email.includes('example.com') && email !== 'yy@gmail.com' && !name.includes('dhanush') && !name.includes('priya') && !name.includes('rohan') && !name.includes('ananya') && name !== 'yy';
         });
         setShooters(realShooters);
         localStorage.setItem('frambit_shooters', JSON.stringify(realShooters));
@@ -234,7 +234,7 @@ function MainApp() {
         let parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
           // Keep only non-demo real user profiles
-          const filtered = parsed.filter(s => s && s.email && !s.email.includes('example.com') && !s.email.includes('frambit.com') && !s.email.includes('aarav') && !s.email.includes('priya') && !s.email.includes('rohan') && !s.email.includes('dhanush'));
+          const filtered = parsed.filter(s => s && s.email && !s.email.includes('example.com') && !s.email.includes('frambit.com') && s.email !== 'yy@gmail.com' && !s.email.includes('aarav') && !s.email.includes('priya') && !s.email.includes('rohan') && !s.email.includes('dhanush') && s.display_name !== 'yy');
           if (filtered.length > 0) return filtered;
         }
       }
