@@ -247,9 +247,7 @@ export function AuthProvider({ children }) {
     const isCreatorFromBackend = Boolean(backendRole && (backendRole.is_creator || backendRole.role === 'creator'));
     const isCreatorFallback = Boolean(
       storedProfile?.role === 'creator' ||
-      storedRole === 'creator' ||
-      cleanEmail.includes('creator') ||
-      cleanEmail.includes('shooter')
+      storedRole === 'creator'
     );
 
     const detectedRole = isCreatorFromBackend || isCreatorFallback ? 'creator' : (backendRole?.role || storedProfile?.role || storedRole || 'user');

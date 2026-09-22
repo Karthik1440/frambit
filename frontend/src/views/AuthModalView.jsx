@@ -128,39 +128,41 @@ export default function AuthModalView({ onNavigate, initialMode = 'signup', init
             <p className="text-xs text-slate-500 font-medium text-center">
               {isSignUp
                 ? 'Select your account type to get started'
-                : 'Select your account type to sign in'}
+                : 'Sign in to access your account'}
             </p>
           </div>
         </div>
 
-        {/* Account Role Selector Switch: User / Client vs Creator / Shooter */}
-        <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1.5 border border-slate-200/80 shadow-2xs">
-          <button
-            type="button"
-            onClick={() => setRole('user')}
-            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              role === 'user'
-                ? 'bg-white text-indigo-600 shadow-md border border-slate-200/60 font-black'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <User className="w-4 h-4" />
-            <span>{isSignUp ? 'Book Creators (User)' : 'User / Client'}</span>
-          </button>
+        {/* Account Role Selector Switch: User / Client vs Creator / Shooter (Sign Up Only) */}
+        {isSignUp && (
+          <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1.5 border border-slate-200/80 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setRole('user')}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                role === 'user'
+                  ? 'bg-white text-indigo-600 shadow-md border border-slate-200/60 font-black'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <User className="w-4 h-4" />
+              <span>Book Creators (User)</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setRole('creator')}
-            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              role === 'creator'
-                ? 'bg-white text-indigo-600 shadow-md border border-slate-200/60 font-black'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Video className="w-4 h-4" />
-            <span>{isSignUp ? "I'm a Creator / Shooter" : 'Creator Studio'}</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setRole('creator')}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                role === 'creator'
+                  ? 'bg-white text-indigo-600 shadow-md border border-slate-200/60 font-black'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Video className="w-4 h-4" />
+              <span>I'm a Creator / Shooter</span>
+            </button>
+          </div>
+        )}
 
         {/* Error Alert Message */}
         {error && (

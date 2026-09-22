@@ -146,7 +146,10 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
             {bookingsList.map((item) => (
               <div
                 key={item.id}
-                onClick={() => setDetailsBooking(item)}
+                onClick={() => {
+                  if (onSelectBooking) onSelectBooking(item);
+                  onNavigate('booking_status');
+                }}
                 className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
               >
                 <div className="flex items-start sm:items-center gap-4 min-w-0">
@@ -205,19 +208,6 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
                     )}
 
                     <div className="flex items-center gap-3 pt-0.5">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDetailsBooking(item);
-                        }}
-                        className="text-xs font-extrabold text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
-                        title="View Booking Details (Number, Location, Brief)"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>Details</span>
-                      </button>
-                      <span className="text-slate-300 text-xs">|</span>
                       <button
                         type="button"
                         onClick={(e) => {

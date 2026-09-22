@@ -12,6 +12,7 @@ from rest_framework import authentication, exceptions
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
+_has_credentials = False
 
 def initialize_firebase():
     """
@@ -19,6 +20,7 @@ def initialize_firebase():
     Tries service account JSON / file first, and always falls back to projectId
     so the default Firebase app ALWAYS exists and public token verification works.
     """
+    global _has_credentials
     if not firebase_admin._apps:
         project_id = os.environ.get("FIREBASE_PROJECT_ID", "frambit-fc825")
 
@@ -29,6 +31,7 @@ def initialize_firebase():
                 cred_dict = json.loads(service_account_json)
                 cred = credentials.Certificate(cred_dict)
                 firebase_admin.initialize_app(cred, options={"projectId": project_id})
+                _has_credentials = True
                 logger.info("Firebase Admin SDK initialized with FIREBASE_SERVICE_ACCOUNT_JSON")
                 return
             except Exception as e:
@@ -51,6 +54,7 @@ def initialize_firebase():
             try:
                 cred = credentials.Certificate(str(cred_path))
                 firebase_admin.initialize_app(cred, options={"projectId": project_id})
+                _has_credentials = True
                 logger.info(f"Firebase Admin SDK initialized successfully with {cred_path}")
                 return
             except Exception as e:
@@ -59,6 +63,7 @@ def initialize_firebase():
         # 3. Guaranteed Fallback: Initialize with projectId so [DEFAULT] app always exists
         try:
             firebase_admin.initialize_app(options={"projectId": project_id})
+            _has_credentials = False
             logger.info(f"Firebase Admin SDK initialized with projectId: {project_id}")
         except Exception as e:
             logger.error(f"Failed to initialize Firebase Admin SDK with projectId: {e}")
@@ -192,14 +197,18 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
 
         id_token = parts[1]
         decoded_token = None
-        try:
-            initialize_firebase()
-            decoded_token = firebase_auth.verify_id_token(id_token)
-        except Exception as e:
-            logger.warning(f"Firebase verify_id_token failed, falling back to payload decoder: {e}")
+        initialize_firebase()
+        if _has_credentials:
+            try:
+                decoded_token = firebase_auth.verify_id_token(id_token)
+            except Exception as e:
+                logger.warning(f"Firebase verify_id_token failed, falling back to payload decoder: {e}")
+                decoded_token = decode_jwt_payload(id_token)
+        else:
             decoded_token = decode_jwt_payload(id_token)
-            if not decoded_token or not (decoded_token.get("uid") or decoded_token.get("user_id") or decoded_token.get("email")):
-                raise exceptions.AuthenticationFailed(f"Invalid Firebase token: {str(e)}")
+
+        if not decoded_token or not (decoded_token.get("uid") or decoded_token.get("user_id") or decoded_token.get("email")):
+            raise exceptions.AuthenticationFailed("Invalid Firebase token")
 
         user = get_or_create_user_from_firebase(decoded_token)
         return (user, decoded_token)
@@ -222,10 +231,14 @@ class FirebaseAuthMiddleware:
             id_token = auth_header.split(" ", 1)[1].strip()
             try:
                 initialize_firebase()
-                try:
-                    decoded_token = firebase_auth.verify_id_token(id_token)
-                except Exception:
+                if _has_credentials:
+                    try:
+                        decoded_token = firebase_auth.verify_id_token(id_token)
+                    except Exception:
+                        decoded_token = decode_jwt_payload(id_token)
+                else:
                     decoded_token = decode_jwt_payload(id_token)
+
                 if decoded_token:
                     request.user = get_or_create_user_from_firebase(decoded_token)
                     request.firebase_token = decoded_token
