@@ -119,11 +119,21 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
     setFormIcon(pkg.icon || '🎥');
     setFormPrice(pkg.price || '');
     setFormDuration(pkg.duration || '');
-    const delivs = pkg.deliverablesList
-      ? pkg.deliverablesList.join(', ')
-      : [pkg.reelsCount, pkg.photosCount, pkg.editing, pkg.revisions].filter(Boolean).join(', ');
+
+    // Properly extract deliverables from all possible fields (array or string)
+    let delivs = '';
+    if (Array.isArray(pkg.deliverables) && pkg.deliverables.length > 0) {
+      delivs = pkg.deliverables.join(', ');
+    } else if (typeof pkg.deliverables === 'string' && pkg.deliverables.trim()) {
+      delivs = pkg.deliverables.trim();
+    } else if (Array.isArray(pkg.deliverablesList) && pkg.deliverablesList.length > 0) {
+      delivs = pkg.deliverablesList.join(', ');
+    } else {
+      delivs = [pkg.reelsCount, pkg.photosCount, pkg.editing, pkg.revisions].filter(Boolean).join(', ');
+    }
+
     setFormDeliverables(delivs);
-    setFormTurnaround(pkg.turnaround?.replace('Delivery: ', '') || '3 days');
+    setFormTurnaround(pkg.turnaround?.replace(/^Delivery:\s*/i, '') || '3 days');
     setFormPopular(!!pkg.popular);
     setFormCoverImage(pkg.cover_image || PRESET_COVER_IMAGES[0].url);
   };
@@ -600,21 +610,32 @@ export default function ServicesPricingView({ shooter, onNavigate, onUpdatePacka
 
                   {/* Deliverables List with Icons */}
                   <div className="space-y-1.5 text-xs font-semibold text-slate-600 mt-3 pt-3 border-t border-slate-100">
-                    {(pkg.deliverablesList || [
-                      pkg.reelsCount,
-                      pkg.photosCount,
-                      pkg.duration,
-                      pkg.editing,
-                      pkg.revisions,
-                      pkg.turnaround
-                    ].filter(Boolean)).map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-slate-600">
-                        <div className="w-4 h-4 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 text-[10px] font-bold">
-                          {item.toLowerCase().includes('reel') ? '😊' : item.toLowerCase().includes('delivery') || item.toLowerCase().includes('hour') || item.toLowerCase().includes('shoot') ? '🕒' : '✓'}
+                    {(() => {
+                      const list = [];
+                      if (pkg.duration) list.push(pkg.duration);
+                      if (pkg.turnaround) {
+                        const t = pkg.turnaround.toLowerCase().startsWith('delivery:') ? pkg.turnaround : `Delivery: ${pkg.turnaround}`;
+                        list.push(t);
+                      }
+                      if (Array.isArray(pkg.deliverables) && pkg.deliverables.length > 0) {
+                        pkg.deliverables.forEach(d => { if (d && String(d).trim()) list.push(String(d).trim()); });
+                      } else if (typeof pkg.deliverables === 'string' && pkg.deliverables.trim()) {
+                        pkg.deliverables.split(',').forEach(d => { if (d && d.trim()) list.push(d.trim()); });
+                      } else if (Array.isArray(pkg.deliverablesList) && pkg.deliverablesList.length > 0) {
+                        pkg.deliverablesList.forEach(d => { if (d && String(d).trim()) list.push(String(d).trim()); });
+                      } else {
+                        [pkg.reelsCount, pkg.photosCount, pkg.editing, pkg.revisions].filter(Boolean).forEach(d => list.push(d));
+                      }
+                      const uniqueList = Array.from(new Set(list));
+                      return uniqueList.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-slate-600">
+                          <div className="w-4 h-4 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 text-[10px] font-bold">
+                            {item.toLowerCase().includes('reel') ? '😊' : item.toLowerCase().includes('delivery') || item.toLowerCase().includes('hour') || item.toLowerCase().includes('shoot') ? '🕒' : '✓'}
+                          </div>
+                          <span className="font-medium text-xs text-slate-700">{item}</span>
                         </div>
-                        <span className="font-medium text-xs text-slate-700">{item}</span>
-                      </div>
-                    ))}
+                      ));
+                    })()}
                   </div>
                 </div>
 

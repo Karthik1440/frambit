@@ -519,21 +519,32 @@ export default function ShooterProfileView({
 
                               {/* Deliverables List with Clean Icons (No Emoji) */}
                               <div className="space-y-1.5 text-xs font-semibold text-slate-600 mt-3 pt-3 border-t border-slate-100">
-                                {(pkg.deliverablesList || [
-                                  pkg.reelsCount,
-                                  pkg.photosCount,
-                                  pkg.duration,
-                                  pkg.editing,
-                                  pkg.revisions,
-                                  pkg.turnaround
-                                ].filter(Boolean)).map((item, idx) => (
-                                  <div key={idx} className="flex items-center gap-2 text-slate-600">
-                                    <div className="w-4 h-4 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                                      <Check className="w-3 h-3 stroke-[2.5]" />
+                                {(() => {
+                                  const list = [];
+                                  if (pkg.duration) list.push(pkg.duration);
+                                  if (pkg.turnaround) {
+                                    const t = pkg.turnaround.toLowerCase().startsWith('delivery:') ? pkg.turnaround : `Delivery: ${pkg.turnaround}`;
+                                    list.push(t);
+                                  }
+                                  if (Array.isArray(pkg.deliverables) && pkg.deliverables.length > 0) {
+                                    pkg.deliverables.forEach(d => { if (d && String(d).trim()) list.push(String(d).trim()); });
+                                  } else if (typeof pkg.deliverables === 'string' && pkg.deliverables.trim()) {
+                                    pkg.deliverables.split(',').forEach(d => { if (d && d.trim()) list.push(d.trim()); });
+                                  } else if (Array.isArray(pkg.deliverablesList) && pkg.deliverablesList.length > 0) {
+                                    pkg.deliverablesList.forEach(d => { if (d && String(d).trim()) list.push(String(d).trim()); });
+                                  } else {
+                                    [pkg.reelsCount, pkg.photosCount, pkg.editing, pkg.revisions].filter(Boolean).forEach(d => list.push(d));
+                                  }
+                                  const uniqueList = Array.from(new Set(list));
+                                  return uniqueList.map((item, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 text-slate-600">
+                                      <div className="w-4 h-4 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                                        <Check className="w-3 h-3 stroke-[2.5]" />
+                                      </div>
+                                      <span className="font-medium text-xs text-slate-700">{item}</span>
                                     </div>
-                                    <span className="font-medium text-xs text-slate-700">{item}</span>
-                                  </div>
-                                ))}
+                                  ));
+                                })()}
                               </div>
                             </div>
 
