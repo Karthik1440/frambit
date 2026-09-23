@@ -111,121 +111,154 @@ function MainApp() {
       });
     } catch (e) {}
 
-    // Fetch real Django backend creators from API (Source of Truth)
-    fetchShooters().then((backendShooters) => {
-      if (Array.isArray(backendShooters)) {
-        const realShooters = backendShooters.filter(s => {
-          const email = (s.email || '').toLowerCase();
-          const name = (s.display_name || s.name || '').toLowerCase();
-          return !email.includes('@frambit.com') && !email.includes('example.com') && email !== 'yy@gmail.com' && !name.includes('dhanush') && !name.includes('priya') && !name.includes('rohan') && !name.includes('ananya') && name !== 'yy';
-        });
-        setShooters(realShooters);
-        localStorage.setItem('frambit_shooters', JSON.stringify(realShooters));
+    // Helper to format backend booking records
+    const formatBackendBookings = (backendBookings) => {
+      if (!Array.isArray(backendBookings)) return [];
+      const formatted = backendBookings.map((b) => ({
+        id: b.id.toString().startsWith('BK-') ? b.id : `BK-${b.id}`,
+        rawId: b.id,
+        shooter: b.shooter,
+        shooter_id: b.shooter,
+        shooterId: b.shooter,
+        service: b.notes || 'Reel Shoot',
+        title: b.notes || 'Reel Shoot',
+        amount: b.estimated_amount ? `₹${Number(b.estimated_amount).toLocaleString('en-IN')}` : '₹4,999',
+        date: b.booking_date || 'Tomorrow',
+        time: b.start_time ? b.start_time.slice(0, 5) : '10:00 AM',
+        location: b.location || 'Bangalore',
+        phone_number: b.phone_number || '',
+        requirements: b.requirements || '',
+        status: (b.status || 'pending').charAt(0).toUpperCase() + (b.status || 'pending').slice(1).toLowerCase(),
+        shooter_name: b.shooter_name || 'Creator',
+        shooter_avatar: b.shooter_avatar || null,
+        image: b.shooter_avatar || null,
+        client_name: b.customer_name || 'Client',
+        client_avatar: b.customer_avatar || null,
+        requested_at: b.created_at || 'Recently',
+      }));
 
-        // If logged-in user matches a backend shooter profile, ensure creator role and sync data
-        const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
-        if (activeEmail) {
-          const myBackend = backendShooters.find(
-            (b) => b.email && b.email.toLowerCase() === activeEmail
-          );
-          if (myBackend) {
-            if (userRole !== 'creator' && setUserRole) {
-              setUserRole('creator');
-            }
-            const updatedProfile = {
-              ...(userData || {}),
-              role: 'creator',
-              id: myBackend.id,
-              display_name: myBackend.display_name || userData?.display_name || 'Creator',
-              name: myBackend.display_name || userData?.name || 'Creator',
-              city: myBackend.city || userData?.city || 'Bengaluru',
-              area: myBackend.area || userData?.area || '',
-              bio: myBackend.bio || userData?.bio || '',
-              category: myBackend.category || userData?.category || 'reel_shooter',
-              hourly_price: myBackend.hourly_price || userData?.hourly_price || 799,
-              packages: Array.isArray(myBackend.packages) && myBackend.packages.length > 0
-                ? myBackend.packages
-                : (userData?.packages || []),
-              portfolio: Array.isArray(myBackend.portfolio) && myBackend.portfolio.length > 0
-                ? myBackend.portfolio
-                : (userData?.portfolio || [])
-            };
-            if (setUserData) setUserData(updatedProfile);
-            saveStoredUserProfile(activeEmail, updatedProfile);
-            localStorage.setItem(`user_role_${activeEmail}`, 'creator');
-            localStorage.setItem('active_user_session', JSON.stringify({ email: activeEmail, role: 'creator' }));
+      let localCompletedMap = new Map();
+      try {
+        const stored = localStorage.getItem('frambit_bookings');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((p) => {
+              if ((p.status || '').toLowerCase() === 'completed') {
+                const clean = String(p.id).replace(/^BK-/, '');
+                localCompletedMap.set(clean, p);
+              }
+            });
           }
         }
+      } catch (e) {}
 
-        setSelectedShooter((current) => {
-          if (activeEmail) {
-            const myBackend = backendShooters.find((b) => b.email && b.email.toLowerCase() === activeEmail.toLowerCase());
-            if (myBackend) return myBackend;
-          }
-          if (!current) return backendShooters[0] || null;
-          const matched = backendShooters.find((b) => b.id === current.id || (current.email && b.email === current.email));
-          return matched || backendShooters[0] || null;
-        });
-      }
-    });
+      return formatted.map((f) => {
+        const cleanId = String(f.id).replace(/^BK-/, '');
+        const localSaved = localCompletedMap.get(cleanId);
+        if (localSaved) {
+          return { ...f, status: 'Completed', is_reviewed: localSaved.is_reviewed || false };
+        }
+        return f;
+      });
+    };
 
-    // Fetch real Django backend bookings from API (Source of Truth)
-    fetchBookings().then((backendBookings) => {
-      if (Array.isArray(backendBookings) && backendBookings.length > 0) {
-        const formatted = backendBookings.map((b) => ({
-          id: b.id.toString().startsWith('BK-') ? b.id : `BK-${b.id}`,
-          rawId: b.id,
-          shooter: b.shooter,
-          shooter_id: b.shooter,
-          shooterId: b.shooter,
-          service: b.notes || 'Reel Shoot',
-          title: b.notes || 'Reel Shoot',
-          amount: b.estimated_amount ? `₹${Number(b.estimated_amount).toLocaleString('en-IN')}` : '₹4,999',
-          date: b.booking_date || 'Tomorrow',
-          time: b.start_time ? b.start_time.slice(0, 5) : '10:00 AM',
-          location: b.location || 'Bangalore',
-          phone_number: b.phone_number || '',
-          requirements: b.requirements || '',
-          status: (b.status || 'pending').charAt(0).toUpperCase() + (b.status || 'pending').slice(1).toLowerCase(),
-          shooter_name: b.shooter_name || 'Creator',
-          shooter_avatar: b.shooter_avatar || null,
-          image: b.shooter_avatar || null,
-          client_name: b.customer_name || 'Client',
-          client_avatar: b.customer_avatar || null,
-          requested_at: b.created_at || 'Recently',
-        }));
-        setBookings((prev) => {
-          let localCompletedMap = new Map();
+    // 1. Fetch Shooters / Creators
+    const syncShooters = () => {
+      fetchShooters().then((backendShooters) => {
+        if (Array.isArray(backendShooters)) {
+          const realShooters = backendShooters.filter((s) => {
+            const email = (s.email || '').toLowerCase();
+            const name = (s.display_name || s.name || '').toLowerCase();
+            return !email.includes('@frambit.com') && !email.includes('example.com') && email !== 'yy@gmail.com' && !name.includes('dhanush') && !name.includes('priya') && !name.includes('rohan') && !name.includes('ananya') && name !== 'yy';
+          });
+          setShooters(realShooters);
           try {
-            const stored = localStorage.getItem('frambit_bookings');
-            if (stored) {
-              const parsed = JSON.parse(stored);
-              if (Array.isArray(parsed)) {
-                parsed.forEach((p) => {
-                  if ((p.status || '').toLowerCase() === 'completed') {
-                    const clean = String(p.id).replace(/^BK-/, '');
-                    localCompletedMap.set(clean, p);
-                  }
-                });
-              }
-            }
+            localStorage.setItem('frambit_shooters', JSON.stringify(realShooters));
           } catch (e) {}
 
-          const formattedWithLocal = formatted.map((f) => {
-            const cleanId = String(f.id).replace(/^BK-/, '');
-            const localSaved = localCompletedMap.get(cleanId);
-            if (localSaved) {
-              return { ...f, status: 'Completed', is_reviewed: localSaved.is_reviewed || false };
+          const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
+          if (activeEmail) {
+            const myBackend = backendShooters.find(
+              (b) => b.email && b.email.toLowerCase() === activeEmail
+            );
+            if (myBackend) {
+              if (userRole !== 'creator' && setUserRole) {
+                setUserRole('creator');
+              }
+              const updatedProfile = {
+                ...(userData || {}),
+                role: 'creator',
+                id: myBackend.id,
+                display_name: myBackend.display_name || userData?.display_name || 'Creator',
+                name: myBackend.display_name || userData?.name || 'Creator',
+                city: myBackend.city || userData?.city || 'Bengaluru',
+                area: myBackend.area || userData?.area || '',
+                bio: myBackend.bio || userData?.bio || '',
+                category: myBackend.category || userData?.category || 'reel_shooter',
+                hourly_price: myBackend.hourly_price || userData?.hourly_price || 799,
+                packages: Array.isArray(myBackend.packages) && myBackend.packages.length > 0
+                  ? myBackend.packages
+                  : (userData?.packages || []),
+                portfolio: Array.isArray(myBackend.portfolio) && myBackend.portfolio.length > 0
+                  ? myBackend.portfolio
+                  : (userData?.portfolio || [])
+              };
+              if (setUserData) setUserData(updatedProfile);
+              saveStoredUserProfile(activeEmail, updatedProfile);
             }
-            return f;
+          }
+        }
+      }).catch(() => {});
+    };
+
+    // 2. Fetch Bookings (Real-time sync)
+    const syncBookings = () => {
+      fetchBookings().then((backendBookings) => {
+        if (Array.isArray(backendBookings) && backendBookings.length > 0) {
+          const formattedWithLocal = formatBackendBookings(backendBookings);
+          setBookings((prev) => {
+            const existingIds = new Set(formattedWithLocal.map((x) => String(x.id)));
+            const filteredPrev = prev.filter((x) => !existingIds.has(String(x.id)));
+            const updated = [...formattedWithLocal, ...filteredPrev];
+            try {
+              localStorage.setItem('frambit_bookings', JSON.stringify(updated));
+            } catch (e) {}
+            return updated;
           });
 
-          const existingIds = new Set(formattedWithLocal.map(x => String(x.id)));
-          const filteredPrev = prev.filter(x => !existingIds.has(String(x.id)));
-          return [...formattedWithLocal, ...filteredPrev];
-        });
+          // Sync currently active selectedBooking if open
+          setSelectedBooking((cur) => {
+            if (!cur) return cur;
+            const match = formattedWithLocal.find((b) => String(b.id) === String(cur.id) || (cur.rawId && b.rawId === cur.rawId));
+            return match ? { ...cur, ...match } : cur;
+          });
+        }
+      }).catch(() => {});
+    };
+
+    // Initial sync
+    syncShooters();
+    syncBookings();
+
+    // 3. Real-time Polling: Poll every 6 seconds if tab is active
+    const pollingInterval = setInterval(() => {
+      if (!document.hidden) {
+        syncBookings();
       }
-    });
+    }, 6000);
+
+    // 4. Instant sync when user switches back to the tab
+    const handleFocus = () => {
+      syncBookings();
+      syncShooters();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(pollingInterval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
   const [shooters, setShooters] = useState(() => {
     try {
