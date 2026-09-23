@@ -5,7 +5,7 @@ import {
   Share2, Sparkles, Clock, Check, X, LogOut, ChevronRight, Package, Trash2, Upload
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { DEFAULT_VIDEOGRAPHER_PACKAGES, matchesBookingId } from '../api';
+import { DEFAULT_VIDEOGRAPHER_PACKAGES, matchesBookingId, getCleanPersonName } from '../api';
 
 export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePackages, onUpdatePortfolio, bookings = [], onUpdateStatus, onDeleteBooking, onClearBookings, unreadChatCount = 0 }) {
   const { currentUser, userData, logout } = useAuth();
@@ -442,7 +442,7 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
                                   </span>
                                 </div>
                                 <p className="text-xs text-slate-600 font-semibold truncate">
-                                  Client: <span className="font-extrabold text-slate-900">{b.client_name || b.client_type || 'Client'}</span> • {b.date} • {b.time}
+                                  Client: <span className="font-extrabold text-slate-900">{getCleanPersonName(b.client_name, b.client_email, 'Client')}</span> • {b.date} • {b.time}
                                 </p>
                                 <p className="text-[11px] text-slate-400 font-medium truncate">
                                   📍 {b.location}
@@ -526,7 +526,7 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
                                   </span>
                                 </div>
                                 <p className="text-xs text-slate-600 font-semibold truncate">
-                                  {b.client_name || 'Client'} • {b.date} • {b.time}
+                                  Client: <span className="font-extrabold text-slate-900">{getCleanPersonName(b.client_name, b.client_email, 'Client')}</span> • {b.date} • {b.time}
                                 </p>
                                 <p className="text-[11px] text-slate-400 font-medium truncate">
                                   📍 {b.location}
@@ -604,7 +604,7 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
                                   </span>
                                 </div>
                                 <p className="text-xs text-slate-600 font-semibold truncate">
-                                  Client: <span className="font-extrabold text-slate-900">{b.client_name || 'Client'}</span> • {b.date} • {b.time}
+                                  Client: <span className="font-extrabold text-slate-900">{getCleanPersonName(b.client_name, b.client_email, 'Client')}</span> • {b.date} • {b.time}
                                 </p>
                                 <p className="text-[11px] text-slate-400 font-medium truncate">
                                   📍 {b.location}

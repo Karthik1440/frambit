@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Calendar, Clock, MapPin, CheckCircle, XCircle, Check, X } from 'lucide-react';
+import { getCleanPersonName } from '../api';
 
 
 export default function BookingRequestsView({ onNavigate, initialBookings = [], onUpdateStatus, onStartChat }) {
@@ -81,9 +82,9 @@ export default function BookingRequestsView({ onNavigate, initialBookings = [], 
                         {item.id}
                       </span>
                       <h3 className="text-sm font-extrabold text-slate-900">{itemTitle}</h3>
-                      {item.client_name && (
-                        <span className="text-[11px] font-semibold text-slate-500">From: {item.client_name}</span>
-                      )}
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        From: {getCleanPersonName(item.client_name, item.client_email, 'Client')}
+                      </span>
                     </div>
                     <span className="text-xs font-extrabold text-slate-900 bg-slate-100 px-3 py-1 rounded-full">
                       {item.amount}
@@ -115,7 +116,7 @@ export default function BookingRequestsView({ onNavigate, initialBookings = [], 
                             if (onStartChat) {
                               const target = {
                                 id: item.client_id || item.user_id || 'client',
-                                name: item.client_name || 'Client',
+                                name: getCleanPersonName(item.client_name, item.client_email, 'Client'),
                                 avatar: item.client_avatar
                               };
                               onStartChat(target, item);
@@ -145,7 +146,7 @@ export default function BookingRequestsView({ onNavigate, initialBookings = [], 
                             if (onStartChat) {
                               const target = {
                                 id: item.client_id || item.user_id || 'client',
-                                name: item.client_name || 'Client',
+                                name: getCleanPersonName(item.client_name, item.client_email, 'Client'),
                                 avatar: item.client_avatar
                               };
                               onStartChat(target, item);

@@ -57,6 +57,24 @@ export const matchesBookingId = (booking, targetId) => {
   return Boolean(cleanBookingId && cleanBookingId === cleanTargetId);
 };
 
+export const getCleanPersonName = (rawName, email = '', fallback = 'Client') => {
+  if (rawName && typeof rawName === 'string') {
+    const clean = rawName.trim();
+    // If it's a raw Firebase UID or hash (e.g. B4qoFdw1e8bPwmpwaBt7M7qDV03, 20+ chars, no spaces, no @)
+    if (clean.length >= 20 && !clean.includes(' ') && !clean.includes('@')) {
+      if (email && typeof email === 'string' && !email.includes('@firebase.user')) {
+        return email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      }
+      return fallback;
+    }
+    if (clean && clean.toLowerCase() !== 'client') return clean;
+  }
+  if (email && typeof email === 'string' && !email.includes('@firebase.user')) {
+    return email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  return fallback;
+};
+
 
 
 export const PLATFORM_CATEGORIES = [
@@ -217,6 +235,13 @@ export async function updateShooterProfile(id, payload) {
 export async function fetchBookings(params = {}) {
   try {
     const res = await api.get('/bookings/', { params });
+    if (Array.isArray(res.data)) {
+      return res.data.map((b) => ({
+        ...b,
+        client_name: getCleanPersonName(b.client_name || b.customer_name, b.client_email, 'Client'),
+        customer_name: getCleanPersonName(b.customer_name || b.client_name, b.client_email, 'Client'),
+      }));
+    }
     return res.data;
   } catch (err) {
     console.warn('Backend fetchBookings fallback:', err.message);

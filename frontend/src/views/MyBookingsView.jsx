@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Bell, Calendar, Check, X, CheckCircle, MessageSquare, Upload, ArrowRight, Clock, Trash2, Star, FileText, Phone, MapPin, Copy, ExternalLink } from 'lucide-react';
-import { matchesBookingId } from '../api';
+import { matchesBookingId, getCleanPersonName } from '../api';
 
 export default function MyBookingsView({ onNavigate, bookings = [], onSelectBooking, onUpdateStatus, userRole = 'client', onDeleteBooking, onClearBookings, onStartChat }) {
   const [detailsBooking, setDetailsBooking] = useState(null);
@@ -155,7 +155,8 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
                 <div className="flex items-start sm:items-center gap-4 min-w-0">
                   {(() => {
                     const rawImg = (userRole === 'creator' ? item.client_avatar : item.shooter_avatar) || item.shooter_avatar;
-                    const targetName = userRole === 'creator' ? (item.client_name || 'Client') : (item.shooter_name || 'Creator');
+                    const clientName = getCleanPersonName(item.client_name, item.client_email, 'Client');
+                    const targetName = userRole === 'creator' ? clientName : (item.shooter_name || 'Creator');
                     const cleanImg = (typeof rawImg === 'string' && rawImg.trim() && !rawImg.includes('null') && !rawImg.includes('photo-1500648767791')) ? rawImg.trim() : null;
                     return (
                       <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden shrink-0 shadow-2xs border border-slate-200/60 mt-0.5 sm:mt-0 bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-black text-white text-lg select-none">
@@ -184,7 +185,7 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
                       )}
                     </div>
                     <p className="text-xs text-slate-700 font-bold truncate">
-                      {userRole === 'creator' ? `Client: ${item.client_name || 'Client'}` : `Creator: ${item.shooter_name || 'Creator'}`}
+                      {userRole === 'creator' ? `Client: ${getCleanPersonName(item.client_name, item.client_email, 'Client')}` : `Creator: ${item.shooter_name || 'Creator'}`}
                     </p>
                     <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-500 font-medium">
                       <span>{item.date} • {item.time}</span>
@@ -281,7 +282,7 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
                           e.stopPropagation();
                           if (onStartChat) {
                             const target = userRole === 'creator'
-                              ? { id: item.client_id || item.user_id || 'client', name: item.client_name || 'Client', avatar: item.client_avatar }
+                              ? { id: item.client_id || item.user_id || 'client', name: getCleanPersonName(item.client_name, item.client_email, 'Client'), avatar: item.client_avatar }
                               : { id: item.shooter_id || item.shooterId || 'creator', name: item.shooter_name || 'Creator', avatar: item.shooter_avatar };
                             onStartChat(target, item);
                           } else {
@@ -379,7 +380,8 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
                 <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
                   {(() => {
                     const rawImg = (userRole === 'creator' ? detailsBooking.client_avatar : detailsBooking.shooter_avatar) || detailsBooking.shooter_avatar;
-                    const targetName = userRole === 'creator' ? (detailsBooking.client_name || 'Client') : (detailsBooking.shooter_name || 'Creator');
+                    const clientName = getCleanPersonName(detailsBooking.client_name, detailsBooking.client_email, 'Client');
+                    const targetName = userRole === 'creator' ? clientName : (detailsBooking.shooter_name || 'Creator');
                     const cleanImg = (typeof rawImg === 'string' && rawImg.trim() && !rawImg.includes('null') && !rawImg.includes('photo-1500648767791')) ? rawImg.trim() : null;
                     return (
                       <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-black text-white text-sm select-none">
@@ -406,7 +408,7 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
                       )}
                     </div>
                     <p className="text-xs text-slate-700 font-bold truncate mt-0.5">
-                      {userRole === 'creator' ? `Client: ${detailsBooking.client_name || 'Client'}` : `Creator: ${detailsBooking.shooter_name || 'Creator'}`}
+                      {userRole === 'creator' ? `Client: ${getCleanPersonName(detailsBooking.client_name, detailsBooking.client_email, 'Client')}` : `Creator: ${detailsBooking.shooter_name || 'Creator'}`}
                     </p>
                   </div>
                 </div>

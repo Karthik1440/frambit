@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowLeft, CheckCircle2, MessageSquare, MoreVertical, Clock, XCircle, X, Check, Calendar, AlertCircle, Star, Upload, Phone, FileText } from 'lucide-react';
+import { getCleanPersonName } from '../api';
 
 export default function BookingStatusView({
   booking,
@@ -99,7 +100,8 @@ export default function BookingStatusView({
           <div className="flex items-center gap-3">
             {(() => {
               const rawImg = (userRole === 'creator' ? (currentBooking.client_avatar || currentBooking.shooter_avatar) : currentBooking.shooter_avatar) || currentBooking.shooter_avatar;
-              const targetName = userRole === 'creator' ? (currentBooking.client_name || 'Client') : (currentBooking.shooter_name || 'Creator');
+              const clientName = getCleanPersonName(currentBooking.client_name, currentBooking.client_email, 'Client');
+              const targetName = userRole === 'creator' ? clientName : (currentBooking.shooter_name || 'Creator');
               const cleanImg = (typeof rawImg === 'string' && rawImg.trim() && !rawImg.includes('null') && !rawImg.includes('photo-1500648767791')) ? rawImg.trim() : null;
               return (
                 <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-tr from-indigo-500 to-purple-600 shrink-0 border border-slate-200/60 flex items-center justify-center font-black text-white text-lg select-none">
@@ -122,7 +124,7 @@ export default function BookingStatusView({
               </h3>
               <p className="text-xs text-slate-500 font-semibold truncate">
                 {userRole === 'creator'
-                  ? (currentBooking.client_name ? `Client: ${currentBooking.client_name}` : 'Client')
+                  ? `Client: ${getCleanPersonName(currentBooking.client_name, currentBooking.client_email, 'Client')}`
                   : (currentBooking.shooter_name ? `with ${currentBooking.shooter_name}` : '')}
               </p>
               <p className="text-xs text-slate-500 font-semibold">{currentBooking.date} • {currentBooking.time}</p>

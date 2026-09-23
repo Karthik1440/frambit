@@ -241,6 +241,9 @@ class BookingSerializer(serializers.ModelSerializer):
 
     customer_name = serializers.SerializerMethodField()
     customer_avatar = serializers.SerializerMethodField()
+    client_name = serializers.SerializerMethodField()
+    client_email = serializers.SerializerMethodField()
+    client_avatar = serializers.SerializerMethodField()
     shooter_name = serializers.CharField(
         source="shooter.display_name",
         read_only=True,
@@ -249,11 +252,34 @@ class BookingSerializer(serializers.ModelSerializer):
 
     def get_customer_name(self, obj):
         if obj.customer and obj.customer.user:
-            first = obj.customer.user.first_name
-            last = obj.customer.user.last_name
+            user = obj.customer.user
+            first = (user.first_name or "").strip()
+            last = (user.last_name or "").strip()
             full = f"{first} {last}".strip()
-            return full or obj.customer.user.username or "Client"
+            if full and full.lower() != "client" and not (len(full) >= 20 and not " " in full):
+                return full
+
+            email = (user.email or "").strip()
+            if email and "@" in email and not email.endswith("@firebase.user"):
+                clean = email.split("@")[0].replace(".", " ").replace("_", " ").title()
+                return clean
+
+            username = (user.username or "").strip()
+            if username and not (len(username) >= 20 and not " " in username and not "@" in username):
+                return username
+            return "Client"
         return "Client"
+
+    def get_client_name(self, obj):
+        return self.get_customer_name(obj)
+
+    def get_client_email(self, obj):
+        if obj.customer and obj.customer.user:
+            return obj.customer.user.email or ""
+        return ""
+
+    def get_client_avatar(self, obj):
+        return self.get_customer_avatar(obj)
 
     def get_customer_avatar(self, obj):
         if obj.customer and getattr(obj.customer, 'profile_image', None):
@@ -357,6 +383,9 @@ class BookingSerializer(serializers.ModelSerializer):
             "customer",
             "customer_name",
             "customer_avatar",
+            "client_name",
+            "client_email",
+            "client_avatar",
             "shooter",
             "shooter_name",
             "shooter_avatar",
