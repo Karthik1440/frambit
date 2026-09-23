@@ -251,14 +251,13 @@ export default function HomeView({
                   key={banner.id || idx}
                   className="w-full shrink-0 min-w-full relative py-10 px-6 sm:py-14 sm:px-10 lg:py-16 lg:px-12 flex items-center justify-between"
                 >
-                  {/* Background Photography Backdrop Image (Admin Managed) */}
+                  {/* Background Photography Backdrop Image (Original 100% Quality) */}
                   <div className="absolute inset-0 z-0">
                     <img
                       src={bgImage}
                       alt={banner.title || 'Frambit Banner'}
-                      className="w-full h-full object-cover opacity-60 group-hover:scale-103 transition-transform duration-700 ease-out"
+                      className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-700 ease-out"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/85 to-transparent" />
                   </div>
 
                   <div className="relative z-10 flex items-center justify-between gap-6 w-full">
