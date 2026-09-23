@@ -7,7 +7,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { DEFAULT_VIDEOGRAPHER_PACKAGES, matchesBookingId, getCleanPersonName } from '../api';
 
-export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePackages, onUpdatePortfolio, bookings = [], onUpdateStatus, onDeleteBooking, onClearBookings, unreadChatCount = 0 }) {
+export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePackages, onUpdatePortfolio, bookings = [], onUpdateStatus, onDeleteBooking, onClearBookings, onStartChat, unreadChatCount = 0 }) {
   const { currentUser, userData, logout } = useAuth();
   const [activeNav, setActiveNav] = useState('home');
 
@@ -546,7 +546,19 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
                               </button>
                               <button
                                 type="button"
-                                onClick={() => onNavigate('chat_conversation')}
+                                onClick={() => {
+                                  if (onStartChat) {
+                                    const target = {
+                                      id: b.client_id || b.user_id || b.client_email || 'client',
+                                      name: getCleanPersonName(b.client_name, b.client_email, 'Client'),
+                                      email: b.client_email,
+                                      avatar: b.client_avatar,
+                                    };
+                                    onStartChat(target, b);
+                                  } else {
+                                    onNavigate('chat_conversation');
+                                  }
+                                }}
                                 className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs rounded-xl border border-indigo-200 transition-all cursor-pointer flex items-center gap-1.5"
                                 title="Chat with client"
                               >

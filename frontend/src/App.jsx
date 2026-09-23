@@ -690,39 +690,53 @@ function MainApp() {
     }
 
     const activeUser = currentUser || userData || {};
-    const myId = activeUser?.uid || activeUser?.email || (userData?.id ? String(userData.id) : 'user');
     const target = targetPerson || {};
-    const targetId = target.id || target.uid || target.email || 'creator';
-    const chatId = getChatId(myId, targetId);
+    const isInitiatorCreator = userRole === 'creator' || userRole === 'shooter' || activeUser.role === 'shooter';
+
+    const clientObj = isInitiatorCreator ? target : activeUser;
+    const creatorObj = isInitiatorCreator ? activeUser : target;
+
+    const clientId = clientObj.uid || clientObj.email || (clientObj.id ? String(clientObj.id) : 'client');
+    const shooterId = creatorObj.id ? String(creatorObj.id) : (creatorObj.shooter_id ? String(creatorObj.shooter_id) : (creatorObj.uid || creatorObj.email || 'creator'));
+
+    const chatId = getChatId(clientId, shooterId);
+
+    const clientName = clientObj.displayName || clientObj.display_name || clientObj.name || (clientObj.email ? clientObj.email.split('@')[0] : 'Client');
+    const clientAvatar = clientObj.photoURL || clientObj.avatar || clientObj.profile_image || null;
+
+    const shooterName = creatorObj.display_name || creatorObj.name || 'Creator';
+    const shooterAvatar = creatorObj.avatar || creatorObj.profile_image || null;
 
     const clientAliases = [
-      activeUser.uid,
-      activeUser.email,
-      userData?.email,
-      activeUser.id ? String(activeUser.id) : null,
-      userData?.id ? String(userData.id) : null,
-    ].filter(Boolean).map(String);
+      clientObj.uid,
+      clientObj.email,
+      clientObj.client_email,
+      clientObj.id ? String(clientObj.id) : null,
+      clientObj.name ? clientObj.name.toLowerCase().replace(/\s+/g, '_') : null,
+      clientObj.display_name ? clientObj.display_name.toLowerCase().replace(/\s+/g, '_') : null,
+    ].filter(Boolean).map((s) => String(s).toLowerCase().trim());
 
     const creatorAliases = [
-      target.id ? String(target.id) : null,
-      target.uid ? String(target.uid) : null,
-      target.email ? String(target.email) : null,
-      target.shooter_id ? String(target.shooter_id) : null,
-      target.name ? target.name.toLowerCase().replace(/\s+/g, '_') : null,
-      target.display_name ? target.display_name.toLowerCase().replace(/\s+/g, '_') : null,
-    ].filter(Boolean).map(String);
+      creatorObj.id ? String(creatorObj.id) : null,
+      creatorObj.uid ? String(creatorObj.uid) : null,
+      creatorObj.email ? String(creatorObj.email) : null,
+      creatorObj.shooter_email ? String(creatorObj.shooter_email) : null,
+      creatorObj.shooter_id ? String(creatorObj.shooter_id) : null,
+      creatorObj.name ? creatorObj.name.toLowerCase().replace(/\s+/g, '_') : null,
+      creatorObj.display_name ? creatorObj.display_name.toLowerCase().replace(/\s+/g, '_') : null,
+    ].filter(Boolean).map((s) => String(s).toLowerCase().trim());
 
     const initialChat = {
       id: chatId,
       participants: Array.from(new Set([...clientAliases, ...creatorAliases])),
-      client_id: String(myId),
-      client_name: activeUser?.displayName || userData?.name || 'Client',
-      client_avatar: activeUser?.photoURL || userData?.avatar || localStorage.getItem('frambit_active_avatar') || null,
-      client_email: activeUser.email || userData?.email || '',
-      shooter_id: String(targetId),
-      shooter_name: target.display_name || target.name || 'Creator',
-      shooter_avatar: target.avatar || target.profile_image || null,
-      shooter_email: target.email || '',
+      client_id: String(clientId),
+      client_name: clientName,
+      client_avatar: clientAvatar,
+      client_email: clientObj.email || clientObj.client_email || '',
+      shooter_id: String(shooterId),
+      shooter_name: shooterName,
+      shooter_avatar: shooterAvatar,
+      shooter_email: creatorObj.email || creatorObj.shooter_email || '',
       last_message: 'Chat started',
       last_message_time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       timestamp: Date.now(),
@@ -740,7 +754,7 @@ function MainApp() {
     } catch (e) {}
 
     // 2. Background sync with Firestore & local cache
-    getOrCreateConversation(activeUser, target, booking)
+    getOrCreateConversation(activeUser, target, booking, userRole)
       .then((chat) => {
         if (chat) setSelectedChat(chat);
       })
@@ -1070,6 +1084,7 @@ function MainApp() {
             onUpdateStatus={handleUpdateBookingStatus}
             onDeleteBooking={handleDeleteBooking}
             onClearBookings={handleClearAllBookings}
+            onStartChat={handleStartChat}
             unreadChatCount={unreadChatCount}
           />
         )}

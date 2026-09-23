@@ -82,69 +82,58 @@ export function saveLocalMessages(chatId, messages) {
 /**
  * Creates or retrieves a chat conversation between the current user and a creator/client.
  */
-export async function getOrCreateConversation(currentUser, targetPerson, booking = null) {
+export async function getOrCreateConversation(currentUser, targetPerson, booking = null, userRole = null) {
   const activeUser = currentUser || {};
   const target = targetPerson || {};
 
-  const myId = activeUser.uid || activeUser.email || (activeUser.id ? String(activeUser.id) : 'user');
-  const targetId = target.id || target.uid || target.email || 'creator';
-  const chatId = getChatId(myId, targetId);
+  const isInitiatorCreator = userRole === 'creator' || userRole === 'shooter' || activeUser.role === 'shooter';
 
-  const myName = activeUser.displayName || activeUser.name || (activeUser.email ? activeUser.email.split('@')[0] : 'User');
-  let myAvatar = activeUser.photoURL || activeUser.avatar || null;
-  if (!myAvatar && activeUser.email) {
-    try {
-      const stored = localStorage.getItem(`user_profile_${activeUser.email.toLowerCase().trim()}`);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.avatar) myAvatar = parsed.avatar;
-      }
-    } catch (e) {}
-  }
-  if (!myAvatar) {
-    myAvatar = localStorage.getItem('frambit_active_avatar') || null;
-  }
-  
-  const targetName = target.display_name || target.name || 'Creator';
-  let targetAvatar = target.avatar || target.profile_image || null;
-  if (!targetAvatar && target.email) {
-    try {
-      const stored = localStorage.getItem(`user_profile_${target.email.toLowerCase().trim()}`);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.avatar) targetAvatar = parsed.avatar;
-      }
-    } catch (e) {}
-  }
+  const clientObj = isInitiatorCreator ? target : activeUser;
+  const creatorObj = isInitiatorCreator ? activeUser : target;
+
+  const clientId = clientObj.uid || clientObj.email || (clientObj.id ? String(clientObj.id) : 'client');
+  const shooterId = creatorObj.id ? String(creatorObj.id) : (creatorObj.shooter_id ? String(creatorObj.shooter_id) : (creatorObj.uid || creatorObj.email || 'creator'));
+
+  const chatId = getChatId(clientId, shooterId);
+
+  const clientName = clientObj.displayName || clientObj.display_name || clientObj.name || (clientObj.email ? clientObj.email.split('@')[0] : 'Client');
+  let clientAvatar = clientObj.photoURL || clientObj.avatar || clientObj.profile_image || null;
+
+  const shooterName = creatorObj.display_name || creatorObj.name || 'Creator';
+  let shooterAvatar = creatorObj.avatar || creatorObj.profile_image || null;
 
   const clientAliases = [
-    activeUser.uid,
-    activeUser.email,
-    activeUser.id ? String(activeUser.id) : null,
-  ].filter(Boolean).map(String);
+    clientObj.uid,
+    clientObj.email,
+    clientObj.client_email,
+    clientObj.id ? String(clientObj.id) : null,
+    clientObj.name ? clientObj.name.toLowerCase().replace(/\s+/g, '_') : null,
+    clientObj.display_name ? clientObj.display_name.toLowerCase().replace(/\s+/g, '_') : null,
+  ].filter(Boolean).map((s) => String(s).toLowerCase().trim());
 
   const creatorAliases = [
-    target.id ? String(target.id) : null,
-    target.uid ? String(target.uid) : null,
-    target.email ? String(target.email) : null,
-    target.shooter_id ? String(target.shooter_id) : null,
-    target.name ? target.name.toLowerCase().replace(/\s+/g, '_') : null,
-    target.display_name ? target.display_name.toLowerCase().replace(/\s+/g, '_') : null,
-  ].filter(Boolean).map(String);
+    creatorObj.id ? String(creatorObj.id) : null,
+    creatorObj.uid ? String(creatorObj.uid) : null,
+    creatorObj.email ? String(creatorObj.email) : null,
+    creatorObj.shooter_email ? String(creatorObj.shooter_email) : null,
+    creatorObj.shooter_id ? String(creatorObj.shooter_id) : null,
+    creatorObj.name ? creatorObj.name.toLowerCase().replace(/\s+/g, '_') : null,
+    creatorObj.display_name ? creatorObj.display_name.toLowerCase().replace(/\s+/g, '_') : null,
+  ].filter(Boolean).map((s) => String(s).toLowerCase().trim());
 
   const participants = Array.from(new Set([...clientAliases, ...creatorAliases]));
 
   const chatMeta = {
     id: chatId,
     participants,
-    client_id: String(myId),
-    client_name: myName,
-    client_avatar: myAvatar,
-    client_email: activeUser.email || '',
-    shooter_id: String(targetId),
-    shooter_name: targetName,
-    shooter_avatar: targetAvatar,
-    shooter_email: target.email || '',
+    client_id: String(clientId),
+    client_name: clientName,
+    client_avatar: clientAvatar,
+    client_email: clientObj.email || clientObj.client_email || '',
+    shooter_id: String(shooterId),
+    shooter_name: shooterName,
+    shooter_avatar: shooterAvatar,
+    shooter_email: creatorObj.email || creatorObj.shooter_email || '',
     last_message: 'Chat started',
     last_message_time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     timestamp: Date.now(),
@@ -675,8 +664,14 @@ export function getChatPartner(chat, currentUser, userData, userRole) {
       } catch (e) {}
     }
 
+    const clientRawName = chat.client_name || chat.customer_name;
+    const clientCleanName = (clientRawName && clientRawName.length >= 20 && !clientRawName.includes(' ') && !clientRawName.includes('@'))
+      ? (chat.client_email ? chat.client_email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Client')
+      : (clientRawName || (chat.client_email ? chat.client_email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Client'));
+
     return {
-      name: chat.client_name || chat.customer_name || 'Client',
+      name: clientCleanName || 'Client',
+      email: chat.client_email || '',
       avatar: finalClientAv,
       role: 'Client',
     };
@@ -687,6 +682,7 @@ export function getChatPartner(chat, currentUser, userData, userRole) {
   let finalShooterAv = sanitizeAvatar(rawShooterAv);
   return {
     name: chat.shooter_name || 'Creator',
+    email: chat.shooter_email || '',
     avatar: finalShooterAv,
     role: 'Creator',
   };
