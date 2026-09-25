@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.utils.html import format_html
 from django.utils.timezone import localtime
 from django.contrib.auth.models import User
@@ -412,6 +412,7 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
         "banner_thumbnail",
         "title",
         "badge_text",
+        "imagekit_link",
         "button_text",
         "order",
         "active_badge",
@@ -439,13 +440,13 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
                 "category_slug",
             ),
         }),
-        ("Banner Image Upload", {
+        ("Banner Image Upload (ImageKit Synced)", {
             "fields": (
                 "image",
                 "image_url",
                 "banner_preview",
             ),
-            "description": "Upload an image file directly from your computer, or paste an external ImageKit / Unsplash URL.",
+            "description": "Upload an image file directly from your computer (it will be automatically uploaded to ImageKit and the URL stored in Image URL), or paste an external ImageKit / image URL.",
         }),
         ("Display & Status", {
             "fields": (
@@ -458,6 +459,11 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
         }),
     )
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if obj.image_url:
+            messages.success(request, f"Banner image hosted on ImageKit: {obj.image_url}")
+
     @admin.display(description="Image Preview")
     def banner_thumbnail(self, obj):
         url = obj.get_image_url()
@@ -467,6 +473,15 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
                 url
             )
         return format_html('<span style="color:#94a3b8;font-size:11px;">No Image</span>')
+
+    @admin.display(description="ImageKit URL")
+    def imagekit_link(self, obj):
+        if obj.image_url:
+            return format_html(
+                '<a href="{}" target="_blank" rel="noopener noreferrer" style="color:#0284c7;font-size:11px;font-weight:600;text-decoration:underline;">View on ImageKit ↗</a>',
+                obj.image_url
+            )
+        return format_html('<span style="color:#94a3b8;font-size:11px;">Local file only</span>')
 
     @admin.display(description="Full Banner Preview")
     def banner_preview(self, obj):

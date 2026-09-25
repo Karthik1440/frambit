@@ -98,11 +98,10 @@ export default function ShooterProfileView({
     }
   };
 
-  if (!shooter) return null;
-
   // Filter verified reviews for this specific creator and ensure deduplicated
-  const currentShooterId = String(shooter.id || '');
+  const currentShooterId = String(shooter?.id || '');
   const creatorReviews = useMemo(() => {
+    if (!currentShooterId) return [];
     const matched = reviews.filter((r) => {
       if (!r) return false;
       const rShooterId = String(r.shooter_id || r.shooter || r.shooterId || '');
@@ -113,6 +112,8 @@ export default function ShooterProfileView({
     });
     return deduplicateReviews(matched);
   }, [reviews, currentShooterId]);
+
+  if (!shooter) return null;
 
   // Calculate live average rating and review count in real-time
   const liveReviewCount = creatorReviews.length > 0

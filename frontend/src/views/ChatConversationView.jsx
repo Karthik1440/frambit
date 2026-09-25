@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, MoreVertical, Paperclip, Send, Image as ImageIcon, CheckCheck, Loader2, Sparkles, X, Trash2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Paperclip, Send, Image as ImageIcon, CheckCheck, Loader2, Sparkles, X, Trash2, AlertCircle, MessageSquare } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { subscribeToMessages, sendChatMessage, markChatAsRead, clearChatMessages, deleteConversation, getChatPartner } from '../services/chatService';
 import { api } from '../api';

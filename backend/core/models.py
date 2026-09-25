@@ -545,12 +545,68 @@ class PromotionalBanner(models.Model):
         verbose_name_plural = "Promotional Banners"
 
     def get_image_url(self):
+        if self.image_url:
+            return self.image_url
         if self.image:
             try:
                 return self.image.url
             except Exception:
                 pass
-        return self.image_url or None
+        return None
+
+    def save(self, *args, **kwargs):
+        # Auto-upload attached image file to ImageKit if newly uploaded or changed
+        if self.image:
+            should_upload = False
+            if not self.pk:
+                should_upload = True
+            else:
+                try:
+                    orig = PromotionalBanner.objects.get(pk=self.pk)
+                    if orig.image != self.image or not self.image_url:
+                        should_upload = True
+                except PromotionalBanner.DoesNotExist:
+                    should_upload = True
+
+            if should_upload:
+                try:
+                    import os
+                    from .media_services import ImageKitService
+
+                    if hasattr(self.image, "open"):
+                        try:
+                            self.image.open("rb")
+                        except Exception:
+                            pass
+                    if hasattr(self.image, "seek"):
+                        try:
+                            self.image.seek(0)
+                        except Exception:
+                            pass
+
+                    file_name = getattr(self.image, "name", "banner.png")
+                    file_name = os.path.basename(file_name) or "banner.png"
+
+                    res = ImageKitService.upload_file(
+                        file_data=self.image,
+                        file_name=file_name,
+                        folder="/banners",
+                        use_unique_file_name=True,
+                        tags=["banner", "promotional", "admin_upload"],
+                    )
+                    if res and res.get("url"):
+                        self.image_url = res["url"]
+
+                    if hasattr(self.image, "seek"):
+                        try:
+                            self.image.seek(0)
+                        except Exception:
+                            pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("ImageKit upload for banner failed: %s", e)
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Banner: {self.title} ({'Active' if self.is_active else 'Inactive'})"

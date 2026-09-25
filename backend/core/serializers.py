@@ -478,6 +478,8 @@ class PromotionalBannerSerializer(serializers.ModelSerializer):
     image_display_url = serializers.SerializerMethodField()
 
     def get_image_display_url(self, obj):
+        if obj.image_url:
+            return obj.image_url
         request = self.context.get("request")
         if obj.image:
             try:
@@ -486,7 +488,7 @@ class PromotionalBannerSerializer(serializers.ModelSerializer):
                 return obj.image.url
             except Exception:
                 pass
-        return obj.image_url or None
+        return None
 
     class Meta:
         model = PromotionalBanner
