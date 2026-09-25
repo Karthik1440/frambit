@@ -476,6 +476,7 @@ class SavedShooterSerializer(serializers.ModelSerializer):
 
 class PromotionalBannerSerializer(serializers.ModelSerializer):
     image_display_url = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()
 
     def get_image_display_url(self, obj):
         if obj.image_url:
@@ -489,6 +490,9 @@ class PromotionalBannerSerializer(serializers.ModelSerializer):
             except Exception:
                 pass
         return None
+
+    def get_image(self, obj):
+        return self.get_image_display_url(obj)
 
     class Meta:
         model = PromotionalBanner

@@ -459,10 +459,25 @@ class PromotionalBannerAdmin(admin.ModelAdmin):
         }),
     )
 
+    actions = ["sync_to_imagekit"]
+    
+    @admin.action(description="Sync selected banners to ImageKit CDN")
+    def sync_to_imagekit(self, request, queryset):
+        synced = 0
+        for b in queryset:
+            if b.image:
+                b.image_url = ""  # Force re-upload
+                b.save()
+                if b.image_url:
+                    synced += 1
+        self.message_user(request, f"Successfully uploaded and synced {synced} banner(s) to ImageKit CDN.")
+
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         if obj.image_url:
-            messages.success(request, f"Banner image hosted on ImageKit: {obj.image_url}")
+            messages.success(request, f"Banner image hosted on ImageKit CDN: {obj.image_url}")
+        elif obj.image:
+            messages.warning(request, "Banner saved locally, but ImageKit upload was not completed. Verify IMAGEKIT credentials.")
 
     @admin.display(description="Image Preview")
     def banner_thumbnail(self, obj):
