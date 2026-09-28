@@ -17,6 +17,30 @@ export default function RateExperienceView({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
+  // Role Guard: Only clients/customers can submit reviews for creators
+  if (userRole === 'creator') {
+    return (
+      <div className="min-h-screen bg-slate-50 pb-24 text-slate-800 animate-fade-in relative flex flex-col justify-center items-center px-4 font-sans">
+        <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xl text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-sm">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-black text-slate-900">Clients Review Creators</h2>
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
+            As a creator, reviews are submitted by your clients. You can manage bookings and chat with clients from your bookings page.
+          </p>
+          <button
+            type="button"
+            onClick={() => onNavigate('my_bookings')}
+            className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all cursor-pointer"
+          >
+            Back to Bookings
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Status Guard: Booking must be completed before user can review
   const bookingStatus = (booking?.status || 'completed').toLowerCase();
   const isCompleted = bookingStatus === 'completed';

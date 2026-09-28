@@ -279,31 +279,73 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
                       <span className="bg-emerald-100 text-emerald-800 text-xs font-extrabold px-3 py-1 rounded-full border border-emerald-200">
                         Completed
                       </span>
-                      {item.is_reviewed ? (
-                        <span className="px-2.5 py-1 bg-amber-50 text-amber-700 font-extrabold text-xs rounded-xl border border-amber-200 flex items-center gap-1">
-                          <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                          <span>Reviewed</span>
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onSelectBooking) onSelectBooking(item);
-                            onNavigate('rate_experience');
-                          }}
-                          className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                          title="Rate & Review Creator"
-                        >
-                          <Star className="w-3.5 h-3.5 fill-white text-white" />
-                          <span>Review Creator</span>
-                        </button>
+                      {userRole !== 'creator' && (
+                        item.is_reviewed ? (
+                          <span className="px-2.5 py-1 bg-amber-50 text-amber-700 font-extrabold text-xs rounded-xl border border-amber-200 flex items-center gap-1">
+                            <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                            <span>Reviewed</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onSelectBooking) onSelectBooking(item);
+                              onNavigate('rate_experience');
+                            }}
+                            className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                            title="Rate & Review Creator"
+                          >
+                            <Star className="w-3.5 h-3.5 fill-white text-white" />
+                            <span>Review Creator</span>
+                          </button>
+                        )
                       )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onStartChat) {
+                            const target = userRole === 'creator'
+                              ? { id: item.client_id || item.user_id || 'client', name: getCleanPersonName(item.client_name, item.client_email, 'Client'), avatar: item.client_avatar }
+                              : { id: item.shooter_id || item.shooterId || 'creator', name: item.shooter_name || 'Creator', avatar: item.shooter_avatar };
+                            onStartChat(target, item);
+                          } else {
+                            onNavigate('chat_conversation');
+                          }
+                        }}
+                        className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs rounded-xl border border-indigo-200 transition-all cursor-pointer flex items-center gap-1.5"
+                        title={userRole === 'creator' ? 'Chat with client' : 'Chat with creator'}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Chat</span>
+                      </button>
                     </div>
                   ) : (
-                    <span className="bg-rose-100 text-rose-800 text-xs font-extrabold px-3 py-1.5 rounded-full border border-rose-200">
-                      Declined
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-rose-100 text-rose-800 text-xs font-extrabold px-3 py-1 rounded-full border border-rose-200">
+                        Declined
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onStartChat) {
+                            const target = userRole === 'creator'
+                              ? { id: item.client_id || item.user_id || 'client', name: getCleanPersonName(item.client_name, item.client_email, 'Client'), avatar: item.client_avatar }
+                              : { id: item.shooter_id || item.shooterId || 'creator', name: item.shooter_name || 'Creator', avatar: item.shooter_avatar };
+                            onStartChat(target, item);
+                          } else {
+                            onNavigate('chat_conversation');
+                          }
+                        }}
+                        className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs rounded-xl border border-indigo-200 transition-all cursor-pointer flex items-center gap-1.5"
+                        title={userRole === 'creator' ? 'Chat with client' : 'Chat with creator'}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Chat</span>
+                      </button>
+                    </div>
                   )}
                   <button
                     type="button"

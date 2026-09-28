@@ -265,25 +265,29 @@ export default function BookingStatusView({
                   Shoot Completed!
                 </h4>
                 <p className="text-xs text-emerald-800/90 font-medium mt-0.5">
-                  Your shoot with <span className="font-bold">{currentBooking.shooter_name || 'the creator'}</span> has been completed. Please rate your experience!
+                  {userRole === 'creator'
+                    ? `You have completed this shoot with ${getCleanPersonName(currentBooking.client_name, currentBooking.client_email, 'Client')}.`
+                    : `Your shoot with ${currentBooking.shooter_name || 'the creator'} has been completed. Please rate your experience!`}
                 </p>
               </div>
             </div>
 
-            {currentBooking.is_reviewed ? (
-              <div className="flex items-center gap-2 bg-emerald-100/70 px-3.5 py-2.5 rounded-2xl text-xs font-extrabold text-emerald-800 border border-emerald-200">
-                <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                <span>You have already submitted a review for this creator.</span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onNavigate('rate_experience')}
-                className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs rounded-2xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-              >
-                <Star className="w-4 h-4 fill-white text-white" />
-                <span>Rate & Review Creator</span>
-              </button>
+            {userRole !== 'creator' && (
+              currentBooking.is_reviewed ? (
+                <div className="flex items-center gap-2 bg-emerald-100/70 px-3.5 py-2.5 rounded-2xl text-xs font-extrabold text-emerald-800 border border-emerald-200">
+                  <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                  <span>You have already submitted a review for this creator.</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('rate_experience')}
+                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs rounded-2xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                >
+                  <Star className="w-4 h-4 fill-white text-white" />
+                  <span>Rate & Review Creator</span>
+                </button>
+              )
             )}
           </div>
         )}
@@ -482,7 +486,7 @@ export default function BookingStatusView({
               >
                 My Bookings
               </button>
-              {!currentBooking.is_reviewed && (
+              {userRole !== 'creator' && !currentBooking.is_reviewed && (
                 <button
                   onClick={() => onNavigate('rate_experience')}
                   className="flex-1 py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer"
@@ -491,6 +495,13 @@ export default function BookingStatusView({
                   <span>Review Creator</span>
                 </button>
               )}
+              <button
+                onClick={() => onOpenChat && onOpenChat()}
+                className="flex-1 py-3 px-4 bg-frambit-gradient text-white font-extrabold text-xs rounded-2xl shadow-frambit hover:opacity-95 transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <MessageSquare className="w-4 h-4 fill-white" />
+                <span>{userRole === 'creator' ? 'Chat with Client' : 'Chat'}</span>
+              </button>
             </>
           ) : (
             <>
