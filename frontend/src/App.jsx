@@ -131,9 +131,12 @@ function MainApp() {
         status: (b.status || 'pending').charAt(0).toUpperCase() + (b.status || 'pending').slice(1).toLowerCase(),
         shooter_name: b.shooter_name || 'Creator',
         shooter_avatar: b.shooter_avatar || null,
+        shooter_email: (b.shooter_email || '').trim().toLowerCase(),
         image: b.shooter_avatar || null,
-        client_name: getCleanPersonName(b.customer_name, b.client_email, 'Client'),
-        client_avatar: b.customer_avatar || null,
+        client_name: getCleanPersonName(b.client_name || b.customer_name, b.client_email, 'Client'),
+        client_email: (b.client_email || b.customer_email || '').trim().toLowerCase(),
+        customer_email: (b.client_email || b.customer_email || '').trim().toLowerCase(),
+        client_avatar: b.customer_avatar || b.client_avatar || null,
         requested_at: b.created_at || 'Recently',
       }));
 
@@ -307,17 +310,31 @@ function MainApp() {
     const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
     if (activeEmail) {
       try {
-        const stored = localStorage.getItem(`frambit_bookings_${activeEmail}`);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) {
+        const userStored = localStorage.getItem(`frambit_bookings_${activeEmail}`);
+        if (userStored) {
+          const parsed = JSON.parse(userStored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
             setBookings(parsed);
             return;
           }
         }
+        // Fallback to general bookings if user-specific key is not populated yet
+        const generalStored = localStorage.getItem('frambit_bookings');
+        if (generalStored) {
+          const parsed = JSON.parse(generalStored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const userOnly = parsed.filter((b) => {
+              const cEmail = (b.client_email || b.customer_email || '').trim().toLowerCase();
+              return !cEmail || cEmail === activeEmail;
+            });
+            if (userOnly.length > 0) {
+              setBookings(userOnly);
+              return;
+            }
+          }
+        }
       } catch (e) {}
     }
-    setBookings([]);
   }, [currentUser?.email, userData?.email]);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [selectedChat, setSelectedChat] = useState(null);
@@ -622,7 +639,17 @@ function MainApp() {
       accepted_at: null,
       declined_at: null,
     };
-    setBookings((prev) => [newBooking, ...prev]);
+    const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
+    setBookings((prev) => {
+      const updated = [newBooking, ...prev];
+      try {
+        localStorage.setItem('frambit_bookings', JSON.stringify(updated));
+        if (activeEmail) {
+          localStorage.setItem(`frambit_bookings_${activeEmail}`, JSON.stringify(updated));
+        }
+      } catch (e) {}
+      return updated;
+    });
     setSelectedBooking(newBooking);
     setCurrentScreen('booking_status');
 
@@ -630,7 +657,7 @@ function MainApp() {
     createBooking({
       shooter: selectedShooter?.id,
       client_name: userData?.display_name || userData?.name || 'Client',
-      client_email: userData?.email || '',
+      client_email: activeEmail,
       client_avatar: userData?.avatar || currentUser?.photoURL || localStorage.getItem('frambit_active_avatar') || undefined,
       location: slotData.location || `${currentLocation}, Karnataka`,
       notes: packageTitle,
@@ -645,6 +672,9 @@ function MainApp() {
           const updated = prev.map((b) => (b.id === newBooking.id ? { ...b, rawId: saved.id } : b));
           try {
             localStorage.setItem('frambit_bookings', JSON.stringify(updated));
+            if (activeEmail) {
+              localStorage.setItem(`frambit_bookings_${activeEmail}`, JSON.stringify(updated));
+            }
           } catch (e) {}
           return updated;
         });
@@ -952,7 +982,6 @@ function MainApp() {
   const userScopedBookings = useMemo(() => {
     if (!Array.isArray(bookings) || bookings.length === 0) return [];
     const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
-    if (!activeEmail) return [];
 
     if (userRole === 'creator') {
       const creatorId = activeCreator?.id ? String(activeCreator.id) : null;
@@ -960,7 +989,7 @@ function MainApp() {
         if (!b) return false;
         const sId = b.shooter_id !== undefined && b.shooter_id !== null ? String(b.shooter_id) : (b.shooter ? String(b.shooter) : null);
         const sEmail = (b.shooter_email || '').trim().toLowerCase();
-        return (creatorId && sId === creatorId) || (sEmail && sEmail === activeEmail);
+        return (creatorId && sId === creatorId) || (sEmail && activeEmail && sEmail === activeEmail);
       });
     }
 
@@ -968,7 +997,10 @@ function MainApp() {
     return bookings.filter((b) => {
       if (!b) return false;
       const cEmail = (b.client_email || b.customer_email || '').trim().toLowerCase();
-      return cEmail && cEmail === activeEmail;
+      if (!activeEmail) return true;
+      if (cEmail && cEmail === activeEmail) return true;
+      // Show newly created session bookings where email hasn't attached yet
+      return !cEmail;
     });
   }, [bookings, userRole, userData, currentUser, activeCreator]);
 

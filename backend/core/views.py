@@ -572,11 +572,15 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         if profile:
             if profile.role == "customer":
-                return Booking.objects.filter(customer=profile).select_related(
+                return Booking.objects.filter(
+                    Q(customer=profile) | (Q(customer__user__email__iexact=user.email) if user.email else Q())
+                ).select_related(
                     "customer", "customer__user", "shooter", "shooter__user", "shooter__user__user"
                 ).order_by("-created_at")
             if profile.role == "shooter":
-                return Booking.objects.filter(shooter__user=profile).select_related(
+                return Booking.objects.filter(
+                    Q(shooter__user=profile) | (Q(shooter__user__user__email__iexact=user.email) if user.email else Q())
+                ).select_related(
                     "customer", "customer__user", "shooter", "shooter__user", "shooter__user__user"
                 ).order_by("-created_at")
 
