@@ -3,7 +3,7 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import Footer from './components/Footer';
 import { AuthProvider, useAuth, saveStoredUserProfile } from './context/AuthContext';
-import { CATEGORY_LABELS, fetchShooters, fetchShooterById, syncCreatorProfile, fetchBookings, createBooking, updateBookingStatusApi, deleteBooking, matchesBookingId, fetchReviewsApi, deduplicateReviews } from './api';
+import { CATEGORY_LABELS, fetchShooters, fetchShooterById, syncCreatorProfile, fetchBookings, createBooking, updateBookingStatusApi, deleteBooking, matchesBookingId, fetchReviewsApi, deduplicateReviews, getCleanPersonName } from './api';
 
 import { detectCurrentCity } from './utils/location';
 
@@ -132,7 +132,7 @@ function MainApp() {
         shooter_name: b.shooter_name || 'Creator',
         shooter_avatar: b.shooter_avatar || null,
         image: b.shooter_avatar || null,
-        client_name: b.customer_name || 'Client',
+        client_name: getCleanPersonName(b.customer_name, b.client_email, 'Client'),
         client_avatar: b.customer_avatar || null,
         requested_at: b.created_at || 'Recently',
       }));
@@ -215,17 +215,15 @@ function MainApp() {
     // 2. Fetch Bookings (Real-time sync)
     const syncBookings = () => {
       fetchBookings().then((backendBookings) => {
-        if (Array.isArray(backendBookings) && backendBookings.length > 0) {
+        if (Array.isArray(backendBookings)) {
           const formattedWithLocal = formatBackendBookings(backendBookings);
-          setBookings((prev) => {
-            const existingIds = new Set(formattedWithLocal.map((x) => String(x.id)));
-            const filteredPrev = prev.filter((x) => !existingIds.has(String(x.id)));
-            const updated = [...formattedWithLocal, ...filteredPrev];
-            try {
-              localStorage.setItem('frambit_bookings', JSON.stringify(updated));
-            } catch (e) {}
-            return updated;
-          });
+          setBookings(formattedWithLocal);
+          try {
+            const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
+            if (activeEmail) {
+              localStorage.setItem(`frambit_bookings_${activeEmail}`, JSON.stringify(formattedWithLocal));
+            }
+          } catch (e) {}
 
           // Sync currently active selectedBooking if open
           setSelectedBooking((cur) => {
@@ -277,23 +275,38 @@ function MainApp() {
   const [selectedShooter, setSelectedShooter] = useState(shooters[0] || null);
   const [selectedSlot, setSelectedSlot] = useState({ date: '20 Sep 2026', time: '4:00 PM - 6:00 PM' });
   const [selectedPackage, setSelectedPackage] = useState(null);
-  const [portfolioVideos, setPortfolioVideos] = useState([]);
   const [bookings, setBookings] = useState(() => {
     try {
-      const stored = localStorage.getItem('frambit_bookings');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          return parsed.filter(b => {
-            const cEmail = (b.client_email || b.customer_email || '').toLowerCase();
-            const sEmail = (b.shooter_email || '').toLowerCase();
-            return !cEmail.includes('example.com') && !cEmail.includes('@frambit.com') && !sEmail.includes('@frambit.com');
-          });
+      const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
+      const key = activeEmail ? `frambit_bookings_${activeEmail}` : null;
+      if (key) {
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) return parsed;
         }
       }
     } catch (e) {}
     return [];
   });
+
+  // Switch bookings when the logged-in user changes
+  useEffect(() => {
+    const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
+    if (activeEmail) {
+      try {
+        const stored = localStorage.getItem(`frambit_bookings_${activeEmail}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            setBookings(parsed);
+            return;
+          }
+        }
+      } catch (e) {}
+    }
+    setBookings([]);
+  }, [currentUser?.email, userData?.email]);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [selectedChat, setSelectedChat] = useState(null);
 
@@ -369,7 +382,7 @@ function MainApp() {
             booking_id: cleanBkId,
             shooter: b.shooter_id || b.shooter,
             shooter_id: b.shooter_id || b.shooter,
-            customer_name: b.client_name || b.customer_name || 'Client',
+            customer_name: getCleanPersonName(b.client_name || b.customer_name, b.client_email || b.customer_email, 'Verified Client'),
             customer_avatar: b.customer_avatar || null,
             rating: cr.rating || 5,
             comment: cr.comment || 'Great experience!',
@@ -382,12 +395,15 @@ function MainApp() {
     }
   }, [bookings]);
 
-  // Persist bookings to localStorage
+  // Persist bookings to user-scoped localStorage
   useEffect(() => {
-    try {
-      localStorage.setItem('frambit_bookings', JSON.stringify(bookings));
-    } catch (e) {}
-  }, [bookings]);
+    const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
+    if (activeEmail) {
+      try {
+        localStorage.setItem(`frambit_bookings_${activeEmail}`, JSON.stringify(bookings));
+      } catch (e) {}
+    }
+  }, [bookings, userData?.email, currentUser?.email]);
 
   // Persist shooters array to localStorage for client-side persistence
   useEffect(() => {
@@ -920,6 +936,43 @@ function MainApp() {
     return selectedShooter || syncedShooters[0] || null;
   }, [selectedShooter, activeCreator, userRole, syncedShooters]);
 
+  // Strict User-Scoped Bookings: Clients only see their own bookings; Creators only see requests sent to them
+  const userScopedBookings = useMemo(() => {
+    if (!Array.isArray(bookings) || bookings.length === 0) return [];
+    const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
+    if (!activeEmail) return [];
+
+    if (userRole === 'creator') {
+      const creatorId = activeCreator?.id ? String(activeCreator.id) : null;
+      return bookings.filter((b) => {
+        if (!b) return false;
+        const sId = b.shooter_id !== undefined && b.shooter_id !== null ? String(b.shooter_id) : (b.shooter ? String(b.shooter) : null);
+        const sEmail = (b.shooter_email || '').trim().toLowerCase();
+        return (creatorId && sId === creatorId) || (sEmail && sEmail === activeEmail);
+      });
+    }
+
+    // Client / Customer role: only see bookings where this client is the booker
+    return bookings.filter((b) => {
+      if (!b) return false;
+      const cEmail = (b.client_email || b.customer_email || '').trim().toLowerCase();
+      return cEmail && cEmail === activeEmail;
+    });
+  }, [bookings, userRole, userData, currentUser, activeCreator]);
+
+  // Creator-only bookings for Creator Dashboard and Booking Requests
+  const creatorScopedBookings = useMemo(() => {
+    if (!Array.isArray(bookings) || bookings.length === 0) return [];
+    const activeEmail = (userData?.email || currentUser?.email || '').trim().toLowerCase();
+    const creatorId = activeCreator?.id ? String(activeCreator.id) : null;
+    return bookings.filter((b) => {
+      if (!b) return false;
+      const sId = b.shooter_id !== undefined && b.shooter_id !== null ? String(b.shooter_id) : (b.shooter ? String(b.shooter) : null);
+      const sEmail = (b.shooter_email || '').trim().toLowerCase();
+      return (creatorId && sId === creatorId) || (sEmail && activeEmail && sEmail === activeEmail);
+    });
+  }, [bookings, userData, currentUser, activeCreator]);
+
   return (
     <div className="h-[100dvh] md:h-auto md:min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans relative overflow-hidden md:overflow-visible">
       
@@ -1088,7 +1141,7 @@ function MainApp() {
         {/* My Bookings View */}
         {currentScreen === 'my_bookings' && (
           <MyBookingsView
-            bookings={bookings}
+            bookings={userScopedBookings}
             userRole={userRole}
             onNavigate={(screen) => setCurrentScreen(screen)}
             onSelectBooking={handleSelectBooking}
@@ -1110,7 +1163,7 @@ function MainApp() {
         {currentScreen === 'dashboard' && (
           <ShooterDashboardView
             shooter={activeCreator}
-            bookings={bookings}
+            bookings={creatorScopedBookings}
             onNavigate={(screen) => setCurrentScreen(screen)}
             onUpdatePackages={handleUpdatePackages}
             onUpdatePortfolio={handleUpdatePortfolio}
@@ -1125,7 +1178,7 @@ function MainApp() {
         {/* Creator Flow Section 2: Booking Requests (Accept/Decline -> Chat) */}
         {currentScreen === 'booking_requests' && (
           <BookingRequestsView
-            initialBookings={bookings}
+            initialBookings={creatorScopedBookings}
             onNavigate={(screen) => setCurrentScreen(screen)}
             onUpdateStatus={handleUpdateBookingStatus}
             onStartChat={handleStartChat}

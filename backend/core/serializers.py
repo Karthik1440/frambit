@@ -249,6 +249,7 @@ class BookingSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     shooter_avatar = serializers.SerializerMethodField()
+    shooter_email = serializers.SerializerMethodField()
 
     def get_customer_name(self, obj):
         if obj.customer and obj.customer.user:
@@ -290,6 +291,11 @@ class BookingSerializer(serializers.ModelSerializer):
         if obj.shooter and obj.shooter.user and obj.shooter.user.profile_image:
             return obj.shooter.user.profile_image
         return None
+
+    def get_shooter_email(self, obj):
+        if obj.shooter and obj.shooter.user and obj.shooter.user.user:
+            return obj.shooter.user.user.email or ""
+        return ""
 
     def to_internal_value(self, data):
         if hasattr(data, "dict"):
@@ -388,6 +394,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "client_avatar",
             "shooter",
             "shooter_name",
+            "shooter_email",
             "shooter_avatar",
             "booking_date",
             "start_time",
@@ -425,11 +432,23 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     def get_customer_name(self, obj):
         if obj.customer and obj.customer.user:
-            first = obj.customer.user.first_name
-            last = obj.customer.user.last_name
+            user = obj.customer.user
+            first = (user.first_name or "").strip()
+            last = (user.last_name or "").strip()
             full = f"{first} {last}".strip()
-            return full or obj.customer.user.username or "Client"
-        return "Client"
+            if full and full.lower() != "client" and not (len(full) >= 20 and " " not in full):
+                return full
+
+            email = (user.email or "").strip()
+            if email and "@" in email and not email.endswith("@firebase.user"):
+                clean = email.split("@")[0].replace(".", " ").replace("_", " ").title()
+                return clean
+
+            username = (user.username or "").strip()
+            if username and not (len(username) >= 20 and " " not in username and "@" not in username):
+                return username
+            return "Verified Client"
+        return "Verified Client"
 
     def get_customer_avatar(self, obj):
         if obj.customer and getattr(obj.customer, 'profile_image', None):

@@ -109,6 +109,8 @@ def get_or_create_user_from_firebase(decoded_token):
         parts = name.split(" ", 1)
         first_name = parts[0]
         last_name = parts[1] if len(parts) > 1 else ""
+    elif email and "@" in email and not email.endswith("@firebase.user"):
+        first_name = email.split("@")[0].replace(".", " ").replace("_", " ").title()
 
     user = None
     # 1. Match primarily by Firebase UID (stored in username)
@@ -197,14 +199,10 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
 
         id_token = parts[1]
         decoded_token = None
-        initialize_firebase()
-        if _has_credentials:
-            try:
-                decoded_token = firebase_auth.verify_id_token(id_token)
-            except Exception as e:
-                logger.warning(f"Firebase verify_id_token failed, falling back to payload decoder: {e}")
-                decoded_token = decode_jwt_payload(id_token)
-        else:
+        try:
+            decoded_token = firebase_auth.verify_id_token(id_token)
+        except Exception as e:
+            logger.debug(f"Firebase verify_id_token failed, trying payload decoder: {e}")
             decoded_token = decode_jwt_payload(id_token)
 
         if not decoded_token or not (decoded_token.get("uid") or decoded_token.get("user_id") or decoded_token.get("email")):

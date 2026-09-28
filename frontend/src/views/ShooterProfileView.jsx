@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ArrowLeft, Share2, Heart, Star, MapPin, Camera, Smartphone, Sparkles, Sliders, CheckCircle, Video, Play, Award, Globe, Calendar, ChevronLeft, ChevronRight, Package, MessageSquare, Check } from 'lucide-react';
-import { CATEGORY_LABELS, fetchShooterById, fetchReviewsApi, deduplicateReviews } from '../api';
+import { CATEGORY_LABELS, fetchShooterById, fetchReviewsApi, deduplicateReviews, getCleanPersonName } from '../api';
 import { useAuth } from '../context/AuthContext';
 
 const InstagramIcon = ({ className = "w-4 h-4" }) => (
@@ -680,7 +680,8 @@ export default function ShooterProfileView({
                   {creatorReviews.length > 0 ? (
                     <div className="space-y-3.5">
                       {creatorReviews.map((rev, idx) => {
-                        const clientName = rev.customer_name || rev.client_name || rev.name || 'Verified Client';
+                        const rawName = rev.customer_name || rev.client_name || rev.name || '';
+                        const clientName = getCleanPersonName(rawName, rev.client_email || rev.customer_email || rev.email, 'Verified Client');
                         const clientAvatar = rev.customer_avatar || rev.client_avatar || rev.avatar;
                         const formattedDate = rev.created_at
                           ? (rev.created_at.includes('T') ? new Date(rev.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : rev.created_at)

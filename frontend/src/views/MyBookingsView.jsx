@@ -14,32 +14,10 @@ export default function MyBookingsView({ onNavigate, bookings = [], onSelectBook
       setTimeout(() => setCopiedPhone(false), 2000);
     } catch (e) {}
   };
-  const [bookingsList, setBookingsList] = useState(() => {
-    try {
-      const stored = localStorage.getItem('frambit_bookings');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    if (Array.isArray(bookings) && bookings.length > 0) return bookings;
-    return [];
-  });
+  const [bookingsList, setBookingsList] = useState(bookings);
 
   React.useEffect(() => {
-    try {
-      const stored = localStorage.getItem('frambit_bookings');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setBookingsList(parsed);
-          return;
-        }
-      }
-    } catch (e) {}
-    if (Array.isArray(bookings) && bookings.length > 0) {
-      setBookingsList(bookings);
-    }
+    setBookingsList(bookings);
   }, [bookings]);
 
   const handleAccept = (id, e) => {

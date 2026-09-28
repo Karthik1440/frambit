@@ -19,32 +19,10 @@ export default function ShooterDashboardView({ shooter, onNavigate, onUpdatePack
     return 'Welcome,';
   };
 
-  const [dashboardBookings, setDashboardBookings] = useState(() => {
-    try {
-      const stored = localStorage.getItem('frambit_bookings');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    if (Array.isArray(bookings) && bookings.length > 0) return bookings;
-    return [];
-  });
+  const [dashboardBookings, setDashboardBookings] = useState(bookings);
 
   React.useEffect(() => {
-    try {
-      const stored = localStorage.getItem('frambit_bookings');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setDashboardBookings(parsed);
-          return;
-        }
-      }
-    } catch (e) {}
-    if (Array.isArray(bookings) && bookings.length > 0) {
-      setDashboardBookings(bookings);
-    }
+    setDashboardBookings(bookings);
   }, [bookings]);
 
   const handleBookingAccept = (id) => {

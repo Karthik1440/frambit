@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowLeft, Star, ThumbsUp } from 'lucide-react';
-import { deduplicateReviews } from '../api';
+import { deduplicateReviews, getCleanPersonName } from '../api';
 
 export default function ReviewsRatingView({ onNavigate, reviews = [], shooter = null }) {
   const cleanReviews = deduplicateReviews(reviews);
@@ -72,7 +72,8 @@ export default function ReviewsRatingView({ onNavigate, reviews = [], shooter = 
           </div>
           {cleanReviews.length > 0 ? (
             cleanReviews.map((rev) => {
-              const name = rev.customer_name || rev.client_name || 'Client';
+              const rawName = rev.customer_name || rev.client_name || rev.name || '';
+              const name = getCleanPersonName(rawName, rev.client_email || rev.customer_email || rev.email, 'Verified Client');
               const avatar = rev.customer_avatar || rev.client_avatar || null;
               const date = rev.created_at
                 ? (rev.created_at.includes('T') ? new Date(rev.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : rev.created_at)

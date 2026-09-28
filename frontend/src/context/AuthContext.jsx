@@ -52,6 +52,32 @@ export function saveStoredUserProfile(email, profileObj) {
   }
 }
 
+// Helper to format friendly error messages from Firebase error codes
+export function formatAuthError(err, fallback = 'Authentication failed.') {
+  if (!err) return fallback;
+  const code = err.code || '';
+  switch (code) {
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Invalid email or password. If you do not have an account, please sign up first.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email address already exists. Please log in instead.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/weak-password':
+      return 'Password should be at least 6 characters.';
+    case 'auth/too-many-requests':
+      return 'Too many failed login attempts. Access to this account has been temporarily disabled. Please try again later.';
+    case 'auth/network-request-failed':
+      return 'Network error. Please check your internet connection and try again.';
+    case 'auth/operation-not-allowed':
+      return 'Email/password sign-in is not enabled in Firebase. Please enable it in the Firebase console.';
+    default:
+      return err.message || fallback;
+  }
+}
+
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [idToken, setIdToken] = useState(localStorage.getItem('firebase_id_token') || null);
@@ -114,7 +140,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Firebase Auth State Listener with localStorage persistent session fallback
+  // Firebase Auth State Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -131,42 +157,18 @@ export function AuthProvider({ children }) {
       } else {
         setIdToken(null);
         localStorage.removeItem('firebase_id_token');
-        // Fallback: check if local active session exists across refresh
-        try {
-          const sessionData = localStorage.getItem('active_user_session');
-          if (sessionData) {
-            const parsed = JSON.parse(sessionData);
-            if (parsed && parsed.email) {
-              const mockUser = { uid: parsed.email, email: parsed.email };
-              setCurrentUser(mockUser);
-              restoreUserSession(parsed.email);
-            } else {
-              setCurrentUser(null);
-              setUserData(null);
-            }
-          } else {
-            setCurrentUser(null);
-            setUserData(null);
-          }
-        } catch (e) {
-          setCurrentUser(null);
-          setUserData(null);
-        }
+        localStorage.removeItem('active_user_session');
+        setCurrentUser(null);
+        setUserData(null);
       }
       setLoading(false);
     }, (error) => {
-      console.warn("Firebase auth listener fallback:", error);
-      // Fallback check on error
-      try {
-        const sessionData = localStorage.getItem('active_user_session');
-        if (sessionData) {
-          const parsed = JSON.parse(sessionData);
-          if (parsed && parsed.email) {
-            setCurrentUser({ uid: parsed.email, email: parsed.email });
-            restoreUserSession(parsed.email);
-          }
-        }
-      } catch (e) {}
+      console.warn("Firebase auth listener error:", error);
+      setIdToken(null);
+      localStorage.removeItem('firebase_id_token');
+      localStorage.removeItem('active_user_session');
+      setCurrentUser(null);
+      setUserData(null);
       setLoading(false);
     });
 
@@ -176,6 +178,33 @@ export function AuthProvider({ children }) {
   // Sign up with Email, Password, Name, Phone Number, and Role
   async function signup(email, password, name, phone, role) {
     const cleanEmail = (email || '').trim().toLowerCase();
+
+    // 1. Create account with Firebase Auth first
+    let res = null;
+    try {
+      res = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+      if (res?.user) {
+        try {
+          await updateProfile(res.user, { displayName: name });
+        } catch (e) {
+          console.warn("Could not update Firebase displayName:", e);
+        }
+        setCurrentUser(res.user);
+        try {
+          const token = await res.user.getIdToken();
+          setIdToken(token);
+          localStorage.setItem('firebase_id_token', token);
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.error("Firebase Signup Error:", err.code, err.message);
+      const friendlyMessage = formatAuthError(err, 'Failed to create an account. Please try again.');
+      const customErr = new Error(friendlyMessage);
+      customErr.code = err.code;
+      throw customErr;
+    }
+
+    // 2. Only on successful Firebase creation, persist profile and session
     const profile = { name, email: cleanEmail, phone, role, avatar: null, packages: [], portfolio: [] };
     saveStoredUserProfile(cleanEmail, profile);
     if (cleanEmail) {
@@ -191,26 +220,13 @@ export function AuthProvider({ children }) {
         display_name: name,
         phone,
         city: 'Bengaluru',
-      }).catch(() => {});
+      }).catch((e) => console.warn("Creator profile sync warning:", e));
     }
 
-    try {
-      const res = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      if (res?.user) {
-        await updateProfile(res.user, { displayName: name });
-        setCurrentUser(res.user);
-      }
-      return { ...res, detectedRole: role };
-    } catch (err) {
-      console.warn("Firebase Signup Fallback (Demo Mode / Unconfigured):", err.message);
-      // Fallback local state login for dev preview / unconfigured Firebase project
-      const mockUser = { uid: cleanEmail, email: cleanEmail, displayName: name };
-      setCurrentUser(mockUser);
-      return { user: mockUser, detectedRole: role };
-    }
+    return { ...res, detectedRole: role };
   }
 
-  // Sign in with Email and Password (Automatic Creator / User Role Detection & Session Persistence)
+  // Sign in with Email and Password (Strict Firebase verification & role detection)
   async function login(email, password) {
     const cleanEmail = (email || '').trim().toLowerCase();
 
@@ -227,10 +243,11 @@ export function AuthProvider({ children }) {
         } catch (e) {}
       }
     } catch (err) {
-      console.warn("Firebase Login Fallback (Demo Mode / Unconfigured):", err.message);
-      const mockUser = { uid: cleanEmail, email: cleanEmail, displayName: formatNameFromEmail(cleanEmail) };
-      setCurrentUser(mockUser);
-      authRes = { user: mockUser };
+      console.error("Firebase Login Error:", err.code, err.message);
+      const friendlyMessage = formatAuthError(err, 'Invalid email or password. Please check your credentials or sign up.');
+      const customErr = new Error(friendlyMessage);
+      customErr.code = err.code;
+      throw customErr;
     }
 
     // 2. Query Django backend to get definitive user role and creator details

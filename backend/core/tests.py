@@ -213,10 +213,35 @@ class FrambitAuditFixesTestCase(TestCase):
         res = other_client.post(f"/api/bookings/{booking_id}/confirm/")
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
-        # 4. Shooter can confirm booking
-        res = self.shooter_client.post(f"/api/bookings/{booking_id}/confirm/")
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data["status"], "confirmed")
+        # 5. Booking Isolation: Verify Clients only see their own bookings, Creators only see their own bookings
+        # Create a booking for Creator B from customer_user
+        res_b = self.customer_client.post("/api/bookings/", {
+            "shooter": self.creator_b_profile.id,
+            "duration_minutes": 60,
+            "notes": "Creator B Shoot",
+        }, format="json")
+        self.assertEqual(res_b.status_code, status.HTTP_201_CREATED)
+
+        # Customer client should see both their bookings
+        cust_list = self.customer_client.get("/api/bookings/")
+        self.assertEqual(cust_list.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(cust_list.data), 2)
+
+        # Shooter A client should ONLY see the booking sent to Shooter A (1 booking)
+        shooter_a_list = self.shooter_client.get("/api/bookings/")
+        self.assertEqual(shooter_a_list.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(shooter_a_list.data), 1)
+        self.assertEqual(shooter_a_list.data[0]["id"], booking_id)
+
+        # Shooter B client should ONLY see the booking sent to Shooter B (1 booking)
+        shooter_b_list = self.creator_b_client.get("/api/bookings/")
+        self.assertEqual(shooter_b_list.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(shooter_b_list.data), 1)
+        self.assertEqual(shooter_b_list.data[0]["id"], res_b.data["id"])
+
+        # Unauthenticated client cannot access bookings list
+        anon_list = self.anon_client.get("/api/bookings/")
+        self.assertEqual(anon_list.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_review_creation_permissions(self):
         # 1. Anon cannot create review

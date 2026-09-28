@@ -555,11 +555,7 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     serializer_class = BookingSerializer
 
-    def get_permissions(self):
-        """Public list/retrieve, authenticated create/update/destroy."""
-        if self.action in ("list", "retrieve"):
-            return [AllowAny()]
-        return [IsAuthenticated()]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         # Allow detail actions to resolve the object and enforce explicit 403 ownership checks
@@ -567,25 +563,30 @@ class BookingViewSet(viewsets.ModelViewSet):
             return Booking.objects.all()
 
         user = self.request.user
-        if user and user.is_authenticated:
+        if not user or not user.is_authenticated:
+            return Booking.objects.none()
+
+        profile = getattr(user, "profile", None)
+        if not profile:
             try:
                 profile = UserProfile.objects.get(user=user)
-                if profile.role == "customer":
-                    return Booking.objects.filter(customer=profile)
-                if profile.role == "shooter":
-                    return Booking.objects.filter(shooter__user=profile)
             except UserProfile.DoesNotExist:
-                pass
+                profile = None
 
-        shooter_id = self.request.query_params.get("shooter") or self.request.query_params.get("shooter_id")
-        if shooter_id:
-            return Booking.objects.filter(shooter_id=shooter_id)
+        if profile:
+            if profile.role == "customer":
+                return Booking.objects.filter(customer=profile).order_by("-created_at")
+            if profile.role == "shooter":
+                return Booking.objects.filter(shooter__user=profile).order_by("-created_at")
 
-        customer_email = self.request.query_params.get("customer_email") or self.request.query_params.get("email")
-        if customer_email:
-            return Booking.objects.filter(customer__user__email__iexact=customer_email)
+        # Fallback for authenticated users matched by email
+        if user.email:
+            return Booking.objects.filter(
+                Q(customer__user__email__iexact=user.email) |
+                Q(shooter__user__user__email__iexact=user.email)
+            ).order_by("-created_at")
 
-        return Booking.objects.all().order_by("-created_at")
+        return Booking.objects.none()
 
     def create(self, request, *args, **kwargs):
         # Allow passing flexible booking data from the frontend
@@ -855,6 +856,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
                 profile = UserProfile.objects.get(user=user)
             except UserProfile.DoesNotExist:
                 pass
+            passed_name = (data.get("customer_name") or data.get("client_name") or "").strip()
+            if passed_name and passed_name.lower() != "client" and not (len(passed_name) >= 20 and " " not in passed_name):
+                if not user.first_name or (len(user.first_name) >= 20 and " " not in user.first_name):
+                    user.first_name = passed_name[:150]
+                    user.save(update_fields=["first_name"])
 
         if not profile:
             if booking and booking.customer:

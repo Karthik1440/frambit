@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Star, CheckCircle2, ShieldAlert, AlertCircle } from 'lucide-react';
-import { submitReviewApi } from '../api';
+import { submitReviewApi, getCleanPersonName } from '../api';
 import { useAuth } from '../context/AuthContext';
 
 export default function RateExperienceView({
@@ -53,7 +53,9 @@ export default function RateExperienceView({
     e.preventDefault();
     setIsSubmitting(true);
 
-    const clientName = userData?.display_name || userData?.name || booking?.client_name || 'Karthik';
+    const rawName = userData?.display_name || userData?.name || booking?.client_name || currentUser?.displayName || '';
+    const clientEmail = userData?.email || currentUser?.email || booking?.client_email || 'client@frambit.com';
+    const clientName = getCleanPersonName(rawName, clientEmail, 'Verified Client');
     const clientAvatar = userData?.avatar || booking?.customer_avatar || null;
 
     const rawBookingId = booking?.rawId || booking?.id;
