@@ -5,7 +5,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || import.meta.env.API_B
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 45000,
+  timeout: 90000, // 90s — allows Render free tier to wake up from cold start (takes 50-90s)
   headers: {
     'Content-Type': 'application/json',
   },
@@ -35,6 +35,24 @@ api.interceptors.request.use(
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+// Response interceptor — auto-retry once on timeout or network error (handles Render cold start)
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error.config;
+    // Only retry once, and only for timeout or network errors (not 4xx/5xx)
+    const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+    const isNetworkError = !error.response && error.message !== 'canceled';
+    if ((isTimeout || isNetworkError) && !config._retried) {
+      config._retried = true;
+      console.info('Backend cold start detected — retrying request in 5s:', config.url);
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // wait 5s then retry
+      return api(config);
+    }
+    return Promise.reject(error);
+  }
 );
 
 export const POPULAR_CITIES = [
