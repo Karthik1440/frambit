@@ -232,12 +232,14 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
     Expects header: Authorization: Bearer <firebase_id_token>
     """
     def authenticate(self, request):
-        # 1. Fast path: check if already resolved by middleware
-        if getattr(request, "_cached_firebase_user", None):
-            return (request._cached_firebase_user, getattr(request, "firebase_token", {}))
-        if getattr(request, "user", None) and request.user.is_authenticated and getattr(request, "firebase_token", None):
-            request._cached_firebase_user = request.user
-            return (request.user, request.firebase_token)
+        # 1. Fast path: check if already resolved by middleware without triggering DRF's .user property
+        django_req = getattr(request, "_request", request)
+        if getattr(django_req, "_cached_firebase_user", None):
+            return (django_req._cached_firebase_user, getattr(django_req, "firebase_token", {}))
+
+        middleware_user = getattr(django_req, "user", None)
+        if middleware_user and getattr(middleware_user, "is_authenticated", False) and getattr(django_req, "firebase_token", None):
+            return (middleware_user, django_req.firebase_token)
 
         auth_header = request.headers.get("Authorization")
         if not auth_header:
