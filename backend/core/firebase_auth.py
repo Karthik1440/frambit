@@ -94,14 +94,52 @@ def decode_jwt_payload(token):
         return None
 
 
+import time
+
+_TOKEN_CACHE = {}  # token_hash -> (user, decoded_dict, timestamp)
+_USER_CACHE = {}   # uid -> (user, timestamp)
+_CACHE_TTL = 300   # 5 minutes in seconds
+
+def get_cached_auth(token_str):
+    if not token_str:
+        return None
+    key = token_str[-32:] if len(token_str) >= 32 else token_str
+    item = _TOKEN_CACHE.get(key)
+    if item:
+        user, decoded, ts = item
+        if time.time() - ts < _CACHE_TTL:
+            return user, decoded
+        else:
+            _TOKEN_CACHE.pop(key, None)
+    return None
+
+def set_cached_auth(token_str, user, decoded):
+    if not token_str or not user:
+        return
+    key = token_str[-32:] if len(token_str) >= 32 else token_str
+    if len(_TOKEN_CACHE) > 1000:
+        _TOKEN_CACHE.clear()
+    _TOKEN_CACHE[key] = (user, decoded, time.time())
+
+
 def get_or_create_user_from_firebase(decoded_token):
     """
     Given a decoded Firebase ID token, find or create the Django User safely.
     Handles duplicate emails gracefully without throwing MultipleObjectsReturned.
+    Caches resolved user in-memory to prevent redundant DB hits on every request.
     """
     uid = decoded_token.get("uid", "").strip()
     email = (decoded_token.get("email") or f"{uid}@firebase.user").strip().lower()
     name = decoded_token.get("name", "").strip()
+
+    # Check user cache
+    cache_key = uid or email
+    if cache_key and cache_key in _USER_CACHE:
+        cached_user, ts = _USER_CACHE[cache_key]
+        if time.time() - ts < _CACHE_TTL:
+            return cached_user
+        else:
+            _USER_CACHE.pop(cache_key, None)
     
     first_name = ""
     last_name = ""
@@ -115,11 +153,11 @@ def get_or_create_user_from_firebase(decoded_token):
     user = None
     # 1. Match primarily by Firebase UID (stored in username)
     if uid:
-        user = User.objects.filter(username=uid[:150]).first()
+        user = User.objects.select_related("profile").filter(username=uid[:150]).first()
 
     # 2. If not matched by UID, match by email
     if not user and email:
-        users = list(User.objects.filter(email__iexact=email).order_by("id"))
+        users = list(User.objects.select_related("profile").filter(email__iexact=email).order_by("id"))
         if len(users) == 1:
             user = users[0]
         elif len(users) > 1:
@@ -180,6 +218,11 @@ def get_or_create_user_from_firebase(decoded_token):
             defaults={"role": "customer"}
         )
 
+    if cache_key:
+        if len(_USER_CACHE) > 1000:
+            _USER_CACHE.clear()
+        _USER_CACHE[cache_key] = (user, time.time())
+
     return user
 
 
@@ -189,6 +232,13 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
     Expects header: Authorization: Bearer <firebase_id_token>
     """
     def authenticate(self, request):
+        # 1. Fast path: check if already resolved by middleware
+        if getattr(request, "_cached_firebase_user", None):
+            return (request._cached_firebase_user, getattr(request, "firebase_token", {}))
+        if getattr(request, "user", None) and request.user.is_authenticated and getattr(request, "firebase_token", None):
+            request._cached_firebase_user = request.user
+            return (request.user, request.firebase_token)
+
         auth_header = request.headers.get("Authorization")
         if not auth_header:
             return None
@@ -198,17 +248,33 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
             return None
 
         id_token = parts[1]
+
+        # 2. Check in-memory token cache
+        cached = get_cached_auth(id_token)
+        if cached:
+            user, decoded_token = cached
+            request._cached_firebase_user = user
+            request.firebase_token = decoded_token
+            return (user, decoded_token)
+
         decoded_token = None
-        try:
-            decoded_token = firebase_auth.verify_id_token(id_token)
-        except Exception as e:
-            logger.debug(f"Firebase verify_id_token failed, trying payload decoder: {e}")
+        if _has_credentials:
+            try:
+                decoded_token = firebase_auth.verify_id_token(id_token)
+            except Exception as e:
+                logger.debug(f"Firebase verify_id_token failed, trying payload decoder: {e}")
+                decoded_token = decode_jwt_payload(id_token)
+        else:
+            # Crucial for performance: avoid 10s GCE metadata server timeout on non-GCP hosts
             decoded_token = decode_jwt_payload(id_token)
 
         if not decoded_token or not (decoded_token.get("uid") or decoded_token.get("user_id") or decoded_token.get("email")):
             raise exceptions.AuthenticationFailed("Invalid Firebase token")
 
         user = get_or_create_user_from_firebase(decoded_token)
+        set_cached_auth(id_token, user, decoded_token)
+        request._cached_firebase_user = user
+        request.firebase_token = decoded_token
         return (user, decoded_token)
 
     def authenticate_header(self, request):
@@ -227,6 +293,16 @@ class FirebaseAuthMiddleware:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             id_token = auth_header.split(" ", 1)[1].strip()
+
+            # Fast path from token cache
+            cached = get_cached_auth(id_token)
+            if cached:
+                user, decoded_token = cached
+                request.user = user
+                request._cached_firebase_user = user
+                request.firebase_token = decoded_token
+                return self.get_response(request)
+
             try:
                 initialize_firebase()
                 if _has_credentials:
@@ -238,7 +314,10 @@ class FirebaseAuthMiddleware:
                     decoded_token = decode_jwt_payload(id_token)
 
                 if decoded_token:
-                    request.user = get_or_create_user_from_firebase(decoded_token)
+                    user = get_or_create_user_from_firebase(decoded_token)
+                    set_cached_auth(id_token, user, decoded_token)
+                    request.user = user
+                    request._cached_firebase_user = user
                     request.firebase_token = decoded_token
             except Exception as e:
                 # Do not block request here; DRF or view permissions will handle unauthenticated access

@@ -341,6 +341,7 @@ class CreatorCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CreatorCategory.objects.filter(is_active=True)
     serializer_class = CreatorCategorySerializer
     permission_classes = [AllowAny]
+    authentication_classes = []
 
 
 class PackageViewSet(viewsets.ModelViewSet):
@@ -399,13 +400,14 @@ class PackageViewSet(viewsets.ModelViewSet):
 class ShooterViewSet(viewsets.ModelViewSet):
 
     queryset = ShooterProfile.objects.select_related(
-        "user"
+        "user", "user__user"
+    ).prefetch_related(
+        "packages_set", "portfolio_photos", "reviews_received"
     ).all()
 
     serializer_class = ShooterProfileSerializer
 
     def get_permissions(self):
-
         if self.action in [
             "list",
             "retrieve",
@@ -415,26 +417,21 @@ class ShooterViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def get_queryset(self):
-
         queryset = ShooterProfile.objects.select_related(
             "user", "user__user"
+        ).prefetch_related(
+            "packages_set", "portfolio_photos", "reviews_received"
         ).all()
 
         city = self.request.query_params.get("city")
-
         category = self.request.query_params.get("category")
-
         available = self.request.query_params.get("available")
 
         if city:
-            queryset = queryset.filter(
-                city__iexact=city
-            )
+            queryset = queryset.filter(city__iexact=city)
 
         if available == "true":
-            queryset = queryset.filter(
-                is_available=True
-            )
+            queryset = queryset.filter(is_available=True)
 
         if category:
             queryset = queryset.filter(
@@ -446,10 +443,8 @@ class ShooterViewSet(viewsets.ModelViewSet):
         import re as _re
         _uid_pattern = _re.compile(r'^[A-Za-z0-9]{20,}$')
         valid_ids = [
-            sp.id for sp in queryset
-            if sp.display_name
-            and not _uid_pattern.match(sp.display_name)
-            and sp.city.strip()
+            sp_id for (sp_id, sp_name, sp_city) in queryset.values_list("id", "display_name", "city")
+            if sp_name and not _uid_pattern.match(sp_name) and sp_city and sp_city.strip()
         ]
         return queryset.filter(id__in=valid_ids)
 
@@ -560,7 +555,9 @@ class BookingViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Allow detail actions to resolve the object and enforce explicit 403 ownership checks
         if self.action in ("confirm", "cancel", "complete"):
-            return Booking.objects.all()
+            return Booking.objects.select_related(
+                "customer", "customer__user", "shooter", "shooter__user", "shooter__user__user"
+            ).all()
 
         user = self.request.user
         if not user or not user.is_authenticated:
@@ -575,15 +572,21 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         if profile:
             if profile.role == "customer":
-                return Booking.objects.filter(customer=profile).order_by("-created_at")
+                return Booking.objects.filter(customer=profile).select_related(
+                    "customer", "customer__user", "shooter", "shooter__user", "shooter__user__user"
+                ).order_by("-created_at")
             if profile.role == "shooter":
-                return Booking.objects.filter(shooter__user=profile).order_by("-created_at")
+                return Booking.objects.filter(shooter__user=profile).select_related(
+                    "customer", "customer__user", "shooter", "shooter__user", "shooter__user__user"
+                ).order_by("-created_at")
 
         # Fallback for authenticated users matched by email
         if user.email:
             return Booking.objects.filter(
                 Q(customer__user__email__iexact=user.email) |
                 Q(shooter__user__user__email__iexact=user.email)
+            ).select_related(
+                "customer", "customer__user", "shooter", "shooter__user", "shooter__user__user"
             ).order_by("-created_at")
 
         return Booking.objects.none()
@@ -825,10 +828,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if shooter_id:
             if not str(shooter_id).strip().isdigit():
                 return Review.objects.none()
-            return Review.objects.filter(shooter_id=int(shooter_id)).order_by("-created_at")
+            return Review.objects.filter(shooter_id=int(shooter_id)).select_related(
+                "customer", "customer__user", "shooter"
+            ).order_by("-created_at")
         return Review.objects.select_related(
-            "customer__user",
-            "shooter",
+            "customer", "customer__user", "shooter"
         ).all().order_by("-created_at")
 
     def create(self, request, *args, **kwargs):
@@ -1046,5 +1050,6 @@ class PromotionalBannerViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = PromotionalBanner.objects.filter(is_active=True).order_by("order", "id")
     serializer_class = PromotionalBannerSerializer
     permission_classes = [AllowAny]
+    authentication_classes = []
 
 

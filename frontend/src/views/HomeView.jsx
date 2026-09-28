@@ -38,9 +38,35 @@ export default function HomeView({
   onLocationChange
 }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [categories, setCategories] = useState(PLATFORM_CATEGORIES);
+  const [categories, setCategories] = useState(() => {
+    try {
+      const stored = localStorage.getItem('frambit_cached_categories');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((c) => ({
+            id: c.slug || String(c.id),
+            label: c.name,
+            iconEmoji: c.icon_emoji,
+            title: c.name,
+            description: c.description,
+          }));
+        }
+      }
+    } catch (e) {}
+    return PLATFORM_CATEGORIES;
+  });
   const [openFaqId, setOpenFaqId] = useState(1);
-  const [banners, setBanners] = useState([]);
+  const [banners, setBanners] = useState(() => {
+    try {
+      const stored = localStorage.getItem('frambit_cached_banners');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
 
   // Load active categories directly from backend REST API
   useEffect(() => {

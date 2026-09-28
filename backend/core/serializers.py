@@ -152,16 +152,25 @@ class ShooterProfileSerializer(serializers.ModelSerializer):
         return obj.user.user.email if obj.user and obj.user.user else ""
 
     def get_review_count(self, obj):
+        if hasattr(obj, "_prefetched_objects_cache") and "reviews_received" in obj._prefetched_objects_cache:
+            return len(obj.reviews_received.all())
         return obj.reviews_received.count()
 
     def get_packages(self, obj):
-        pkgs = list(obj.packages_set.all().order_by("sort_order", "created_at"))
+        if hasattr(obj, "_prefetched_objects_cache") and "packages_set" in obj._prefetched_objects_cache:
+            pkgs = sorted(obj.packages_set.all(), key=lambda p: (getattr(p, "sort_order", 0), getattr(p, "created_at", "")))
+        else:
+            pkgs = list(obj.packages_set.all().order_by("sort_order", "created_at"))
         if pkgs:
             return PackageSerializer(pkgs, many=True).data
         return obj.packages or []
 
     def get_portfolio(self, obj):
-        photos = list(obj.portfolio_photos.filter(is_public=True).order_by("-created_at"))
+        if hasattr(obj, "_prefetched_objects_cache") and "portfolio_photos" in obj._prefetched_objects_cache:
+            photos = [p for p in obj.portfolio_photos.all() if p.is_public]
+            photos.sort(key=lambda p: getattr(p, "created_at", ""), reverse=True)
+        else:
+            photos = list(obj.portfolio_photos.filter(is_public=True).order_by("-created_at"))
         if photos:
             return PortfolioPhotoSerializer(photos, many=True).data
         return obj.portfolio or []

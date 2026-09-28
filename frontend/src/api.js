@@ -14,17 +14,24 @@ export const api = axios.create({
 // Request interceptor to attach Firebase ID token
 api.interceptors.request.use(
   async (config) => {
-    try {
-      let token = localStorage.getItem('firebase_id_token');
-      if (auth?.currentUser) {
-        token = await auth.currentUser.getIdToken();
-        localStorage.setItem('firebase_id_token', token);
+    // Only attach token to endpoints that might require auth
+    // Public endpoints like categories and banners never require auth headers
+    const url = config.url || '';
+    const isPublicEndpoint = url.includes('/categories/') || url.includes('/banners/');
+
+    if (!isPublicEndpoint) {
+      try {
+        let token = localStorage.getItem('firebase_id_token');
+        if (auth?.currentUser) {
+          token = await auth.currentUser.getIdToken();
+          localStorage.setItem('firebase_id_token', token);
+        }
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (err) {
+        console.debug('Failed to get Firebase token:', err);
       }
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch (err) {
-      console.debug('Failed to get Firebase token:', err);
     }
 
     // Automatically remove Content-Type if payload is FormData so browser sets correct multipart/form-data boundary
@@ -132,22 +139,38 @@ export async function fetchShooters(params = {}) {
 
 // Fetch admin-managed creator categories for dropdowns
 export async function fetchCategories() {
+  const cached = localStorage.getItem('frambit_cached_categories');
   try {
     const res = await api.get('/categories/');
-    return Array.isArray(res.data) ? res.data : (res.data?.results || []);
+    const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+    if (data.length > 0) {
+      localStorage.setItem('frambit_cached_categories', JSON.stringify(data));
+    }
+    return data;
   } catch (err) {
     console.warn('Backend fetchCategories fallback:', err.message);
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
     return [];
   }
 }
 
 // Fetch admin-managed promotional banners for Home view
 export async function fetchBanners() {
+  const cached = localStorage.getItem('frambit_cached_banners');
   try {
     const res = await api.get('/banners/');
-    return Array.isArray(res.data) ? res.data : (res.data?.results || []);
+    const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+    if (data.length > 0) {
+      localStorage.setItem('frambit_cached_banners', JSON.stringify(data));
+    }
+    return data;
   } catch (err) {
     console.warn('Backend fetchBanners fallback:', err.message);
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
     return [];
   }
 }
