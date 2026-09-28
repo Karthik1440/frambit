@@ -7,7 +7,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { auth } from '../firebase';
-import { fetchUserRole, syncCreatorProfile } from '../api';
+import { fetchUserRole, syncCreatorProfile, syncUserProfile } from '../api';
 
 const AuthContext = createContext();
 
@@ -214,6 +214,8 @@ export function AuthProvider({ children }) {
     setUserRole(role);
     setUserData(profile);
 
+    // Always sync user to Django DB so bookings can be correctly linked
+    syncUserProfile({ email: cleanEmail, display_name: name, phone, role }).catch(() => {});
     if (role === 'creator') {
       syncCreatorProfile({
         email: cleanEmail,
@@ -257,6 +259,9 @@ export function AuthProvider({ children }) {
     } catch (e) {
       console.warn("fetchUserRole error:", e);
     }
+
+    // Always ensure user has a UserProfile row in Django DB so bookings link correctly
+    syncUserProfile({ email: cleanEmail, role: backendRole?.role || 'user' }).catch(() => {});
 
     const storedProfile = getStoredUserProfile(cleanEmail);
     const storedRole = cleanEmail ? localStorage.getItem(`user_role_${cleanEmail}`) : null;
