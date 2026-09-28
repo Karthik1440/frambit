@@ -212,8 +212,18 @@ function MainApp() {
       }).catch(() => {});
     };
 
-    // 2. Fetch Bookings (Real-time sync)
+    // 2. Fetch Bookings (Real-time sync with in-flight guard)
+    let isFetchingBookings = false;
     const syncBookings = () => {
+      // Only sync if user is logged in or has an active auth token
+      const hasAuth = Boolean(
+        currentUser || 
+        userData?.email || 
+        localStorage.getItem('firebase_id_token')
+      );
+      if (!hasAuth || isFetchingBookings) return;
+
+      isFetchingBookings = true;
       fetchBookings().then((backendBookings) => {
         if (Array.isArray(backendBookings)) {
           const formattedWithLocal = formatBackendBookings(backendBookings);
@@ -232,19 +242,21 @@ function MainApp() {
             return match ? { ...cur, ...match } : cur;
           });
         }
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => {
+        isFetchingBookings = false;
+      });
     };
 
     // Initial sync
     syncShooters();
     syncBookings();
 
-    // 3. Real-time Polling: Poll every 6 seconds if tab is active
+    // 3. Real-time Polling: Poll every 25 seconds if tab is active (avoid clogging free tier backend)
     const pollingInterval = setInterval(() => {
       if (!document.hidden) {
         syncBookings();
       }
-    }, 6000);
+    }, 25000);
 
     // 4. Instant sync when user switches back to the tab
     const handleFocus = () => {
