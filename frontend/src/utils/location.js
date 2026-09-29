@@ -19,7 +19,7 @@ export async function detectCurrentLocationDetails() {
           );
           if (res.ok) {
             const data = await res.json();
-            const city = data.city || data.principalSubdivision || 'Bengaluru';
+            const city = (data.city && data.city.trim()) || (data.locality && data.locality.trim()) || data.principalSubdivision || 'Bengaluru';
 
             // Find specific locality or sub-locality from administrative or informative info
             let area = data.locality;

@@ -207,10 +207,16 @@ export default function Header({ currentScreen, onNavigate, currentLocation = 'B
 
           {/* Mobile Location & Search Controls (No redundant hamburger menu) */}
           <div className="flex md:hidden items-center gap-2">
-            <div className="flex items-center gap-1 bg-slate-100/90 text-slate-800 text-[11px] font-bold px-2.5 py-1.5 rounded-full border border-slate-200/60 shadow-2xs">
-              <MapPin className="w-3 h-3 text-indigo-600 fill-indigo-100" />
-              <span className="max-w-[90px] truncate">{currentLocation}</span>
-            </div>
+            <button
+              type="button"
+              onClick={handleDetectGps}
+              disabled={isDetectingGps}
+              className="flex items-center gap-1 bg-slate-100/90 hover:bg-slate-200 text-slate-800 text-[11px] font-bold px-2.5 py-1.5 rounded-full border border-slate-200/60 shadow-2xs cursor-pointer active:scale-95 transition-all"
+              title="Click to detect current location"
+            >
+              <MapPin className={`w-3 h-3 text-indigo-600 fill-indigo-100 ${isDetectingGps ? 'animate-bounce' : ''}`} />
+              <span className="max-w-[95px] truncate">{isDetectingGps ? 'Detecting...' : currentLocation}</span>
+            </button>
 
             <button
               onClick={() => onNavigate('search')}

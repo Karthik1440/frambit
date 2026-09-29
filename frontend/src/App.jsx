@@ -60,7 +60,36 @@ function MainApp() {
     }
     setCurrentScreen(screen);
   };
-  const [currentLocation, setCurrentLocation] = useState('Bengaluru');
+
+  const [currentLocation, setCurrentLocation] = useState(() => {
+    try {
+      return localStorage.getItem('frambit_user_city') || 'Bengaluru';
+    } catch (e) {
+      return 'Bengaluru';
+    }
+  });
+
+  const handleLocationChange = (newLoc) => {
+    if (newLoc && typeof newLoc === 'string') {
+      setCurrentLocation(newLoc);
+      try {
+        localStorage.setItem('frambit_user_city', newLoc);
+      } catch (e) {}
+    }
+  };
+
+  // Automatically detect user's current city on app launch
+  useEffect(() => {
+    detectCurrentCity()
+      .then((city) => {
+        if (city && typeof city === 'string') {
+          handleLocationChange(city);
+        }
+      })
+      .catch((err) => {
+        console.warn('Auto location detection on startup failed:', err);
+      });
+  }, []);
 
   const handleUpdatePackages = (updatedPackages) => {
     if (userData && userData.email) {
@@ -1026,7 +1055,7 @@ function MainApp() {
           currentScreen={currentScreen}
           onNavigate={(screenId) => setCurrentScreen(screenId)}
           currentLocation={currentLocation}
-          onLocationChange={(newLoc) => setCurrentLocation(newLoc)}
+          onLocationChange={handleLocationChange}
           unreadChatCount={unreadChatCount}
         />
       )}
