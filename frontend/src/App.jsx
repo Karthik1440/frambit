@@ -63,7 +63,14 @@ function MainApp() {
 
   const [currentLocation, setCurrentLocation] = useState(() => {
     try {
-      return localStorage.getItem('frambit_user_city') || '';
+      // Only use cached city if it was stored within the last 30 minutes
+      const cached = localStorage.getItem('frambit_user_city');
+      const cachedAt = parseInt(localStorage.getItem('frambit_user_city_at') || '0', 10);
+      const AGE_LIMIT_MS = 30 * 60 * 1000; // 30 minutes
+      if (cached && Date.now() - cachedAt < AGE_LIMIT_MS) {
+        return cached;
+      }
+      return '';
     } catch (e) {
       return '';
     }
@@ -74,11 +81,13 @@ function MainApp() {
       setCurrentLocation(newLoc.trim());
       try {
         localStorage.setItem('frambit_user_city', newLoc.trim());
+        localStorage.setItem('frambit_user_city_at', String(Date.now()));
       } catch (e) {}
     }
   };
 
-  // Automatically detect user's current city on app launch
+  // Always detect fresh on startup — never rely solely on cache
+  // This ensures moving devices (same phone, new city) always get the correct location
   useEffect(() => {
     detectCurrentCity()
       .then((city) => {

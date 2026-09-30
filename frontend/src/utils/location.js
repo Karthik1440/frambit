@@ -1,32 +1,50 @@
 import { saveClientCoords } from './geo.js';
 
+// Suffixes that indicate an administrative organization, not a place name.
+// We strip or skip entries containing these.
+const ADMIN_JUNK_RE = /\b(district|authority|region|corporation|metropolitan|development|board|council|zonal|railway|zone|taluk|tehsil|mandal|division|urban agglomeration)\b/i;
+
 /**
  * Resolves a human-readable city/town name from the BigDataCloud reverse-geocode response.
-
  *
- * Priority chain (most specific → least specific):
- *   city → locality → county → principalSubdivision (state)
- *
- * This covers rural areas (taluks, small towns like Nadapuram in Kerala) that have
- * no `city` field in the response, but always have at least one of the others.
+ * Strategy:
+ *  1. data.city — most reliable for cities/towns
+ *  2. data.locality — reliable for smaller towns (e.g. Nadapuram)
+ *  3. Walk administrative[] sorted by `order` descending (most specific first),
+ *     skip entries with administrative jargon, skip country/state level
+ *  4. data.principalSubdivision — state as last resort
  */
 function resolveCityFromBDC(data) {
-  const candidates = [
-    data.city,
-    data.locality,
-    // county is typically the district-level name — reliable for rural India
-    data.localityInfo?.administrative?.find(
-      (a) => a.adminLevel === 6 || a.adminLevel === 7 || a.order === 6 || a.order === 7
-    )?.name,
-    data.county,
-    data.principalSubdivision,
-  ];
-  for (const c of candidates) {
-    const name = c && typeof c === 'string' ? c.trim() : null;
-    if (name && name !== 'India') return name;
+  // 1. Direct city field
+  if (data.city && data.city.trim() && data.city.trim() !== 'India') {
+    return data.city.trim();
   }
+
+  // 2. Locality (reliable for taluks and small towns)
+  if (data.locality && data.locality.trim() && data.locality.trim() !== 'India') {
+    return data.locality.trim();
+  }
+
+  // 3. Walk administrative list from most specific (highest order) to least specific
+  const adminList = data.localityInfo?.administrative || [];
+  const sorted = [...adminList].sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
+  const stateName = data.principalSubdivision || '';
+
+  for (const entry of sorted) {
+    const name = entry.name && entry.name.trim();
+    if (!name) continue;
+    if (name === 'India' || name === stateName) continue;          // skip country/state
+    if (entry.adminLevel <= 4) continue;                           // skip country/state level
+    if (ADMIN_JUNK_RE.test(name)) continue;                        // skip org/admin names
+    return name;
+  }
+
+  // 4. State name as absolute last resort
+  if (stateName && stateName !== 'India') return stateName;
+
   return null;
 }
+
 
 /**
  * Resolves a human-readable sub-area / neighbourhood from the BigDataCloud response.
@@ -107,11 +125,20 @@ export async function detectCurrentLocationDetails() {
         resolve(ipDetails);
       },
       async (error) => {
-        console.warn('Geolocation error:', error);
+        // GeolocationPositionError codes:
+        // 1 = PERMISSION_DENIED  — user said no, silent fallback is correct
+        // 2 = POSITION_UNAVAILABLE — device has no GPS signal
+        // 3 = TIMEOUT — took longer than timeout ms
+        if (error.code === 1) {
+          // Silently fall back to IP — permission denied is expected on many devices
+        } else {
+          console.debug(`[Location] GPS unavailable (code ${error.code}: ${error.message}) — falling back to IP`);
+        }
         const ipDetails = await fetchIpLocationDetails();
         resolve(ipDetails);
       },
-      { timeout: 6000, enableHighAccuracy: true }
+      { timeout: 8000, enableHighAccuracy: false } // lowAccuracy = faster fix, fewer timeouts
+
     );
   });
 }

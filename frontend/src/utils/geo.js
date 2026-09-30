@@ -130,21 +130,25 @@ export function getCityCoords(cityName) {
 }
 
 /**
- * Saves the client's GPS coordinates to localStorage.
+ * Saves the client's GPS coordinates to localStorage with a timestamp.
  */
 export function saveClientCoords(lat, lng) {
   try {
     localStorage.setItem('frambit_client_lat', String(lat));
     localStorage.setItem('frambit_client_lng', String(lng));
+    localStorage.setItem('frambit_client_coords_at', String(Date.now()));
   } catch (e) {}
 }
 
 /**
  * Reads the client's saved GPS coordinates from localStorage.
- * Returns { lat, lng } or null if not available.
+ * Returns { lat, lng } or null if not available or older than 30 minutes.
  */
 export function getClientCoords() {
   try {
+    const AGE_LIMIT_MS = 30 * 60 * 1000; // 30 minutes
+    const savedAt = parseInt(localStorage.getItem('frambit_client_coords_at') || '0', 10);
+    if (Date.now() - savedAt > AGE_LIMIT_MS) return null; // expired
     const lat = parseFloat(localStorage.getItem('frambit_client_lat'));
     const lng = parseFloat(localStorage.getItem('frambit_client_lng'));
     if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
