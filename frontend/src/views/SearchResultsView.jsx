@@ -1,13 +1,20 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Star, ArrowLeft, MapPin, Heart, ChevronDown, Play, Check } from 'lucide-react';
 import { PLATFORM_CATEGORIES, CATEGORY_LABELS } from '../api';
+import { getClientCoords, computeCreatorDistance } from '../utils/geo.js';
 
 const CATEGORY_OPTIONS = [
   ...PLATFORM_CATEGORIES.map(c => ({ id: c.id, label: c.label, icon: c.iconEmoji })),
   { id: 'more', label: 'All Creators', icon: '🌐' },
 ];
 
-export const getShooterDistance = (s) => {
+export const getShooterDistance = (s, clientCoords) => {
+  // 1. Real Haversine distance from client GPS
+  if (clientCoords) {
+    const realDist = computeCreatorDistance(s, clientCoords.lat, clientCoords.lng);
+    if (realDist !== null) return realDist;
+  }
+  // 2. Pre-computed field from backend
   if (s.distance_km !== undefined && s.distance_km !== null) {
     const d = parseFloat(s.distance_km);
     if (!isNaN(d)) return d;
@@ -19,8 +26,8 @@ export const getShooterDistance = (s) => {
       if (!isNaN(d)) return d;
     }
   }
-  const seed = (typeof s.id === 'number' ? s.id : (s.id ? String(s.id).charCodeAt(0) : 7)) % 10;
-  return Number((1.2 + (seed * 0.7)).toFixed(1));
+  // 3. Unknown — sort last
+  return Infinity;
 };
 
 export default function SearchResultsView({
@@ -31,12 +38,13 @@ export default function SearchResultsView({
   onSelectCategory,
   onNavigate,
   onSelectShooter,
-  currentLocation = 'Bengaluru'
+  currentLocation = ''
 }) {
   const [searchTerm, setSearchTerm] = useState(CATEGORY_LABELS[selectedCategory] || 'Reel shooter');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState(() => selectedCategory === 'nearest' ? 'nearest' : null);
   const dropdownRef = useRef(null);
+  const clientCoords = useMemo(() => getClientCoords(), []);
 
   // Sync searchTerm when selectedCategory changes externally
   useEffect(() => {
@@ -127,7 +135,7 @@ export default function SearchResultsView({
 
     // 3. Filter & Sort by Active Quick Filter Pills
     if (activeFilter === 'nearest' || activeFilter === '📍 Nearest') {
-      result.sort((a, b) => getShooterDistance(a) - getShooterDistance(b));
+      result.sort((a, b) => getShooterDistance(a, clientCoords) - getShooterDistance(b, clientCoords));
     } else if (activeFilter === 'Rating ▾' || activeFilter === 'rating') {
       result.sort((a, b) => b.rating - a.rating);
     } else if (activeFilter === 'Price ▾' || activeFilter === 'price_low') {
@@ -148,7 +156,7 @@ export default function SearchResultsView({
     });
 
     return Array.from(dedupeMap.values());
-  }, [shooters, selectedCategory, searchTerm, activeFilter]);
+  }, [shooters, selectedCategory, searchTerm, activeFilter, clientCoords]);
 
   return (
     <div className="min-h-screen bg-slate-50/70 pb-24 text-slate-800 animate-fade-in font-sans">

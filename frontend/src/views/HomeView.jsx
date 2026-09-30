@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Search, MapPin, Video, Camera, Scissors, Sparkles, Shirt, Radio, UserCheck, Star, Grid, Heart, ChevronDown, Check, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { POPULAR_CITIES, PLATFORM_CATEGORIES, CATEGORY_LABELS, fetchCategories, fetchBanners } from '../api';
 import CreatorCard from '../components/CreatorCard';
+import { getClientCoords, computeCreatorDistance } from '../utils/geo.js';
 
 
 const ICON_MAP = {
@@ -166,7 +167,16 @@ export default function HomeView({
 
   const [creatorFilter, setCreatorFilter] = useState('top_rated');
 
+  // Read client's GPS coords (saved by location.js when GPS fires)
+  const clientCoords = useMemo(() => getClientCoords(), []);
+
   const getShooterDistance = (s) => {
+    // 1. Use real Haversine distance if client GPS is available
+    if (clientCoords) {
+      const realDist = computeCreatorDistance(s, clientCoords.lat, clientCoords.lng);
+      if (realDist !== null) return realDist;
+    }
+    // 2. Use distance_km / distance field if pre-computed by backend
     if (s.distance_km !== undefined && s.distance_km !== null) {
       const d = parseFloat(s.distance_km);
       if (!isNaN(d)) return d;
@@ -178,8 +188,8 @@ export default function HomeView({
         if (!isNaN(d)) return d;
       }
     }
-    const seed = (typeof s.id === 'number' ? s.id : (s.id ? String(s.id).charCodeAt(0) : 7)) % 10;
-    return Number((1.2 + (seed * 0.7)).toFixed(1));
+    // 3. No coords available — return Infinity so unknowns sort last
+    return Infinity;
   };
 
   const topRatedCreators = useMemo(() => {
@@ -202,7 +212,7 @@ export default function HomeView({
     }
 
     return uniqueList.slice(0, 8);
-  }, [shooters, creatorFilter]);
+  }, [shooters, creatorFilter, clientCoords]);
 
   const categoryScrollRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);

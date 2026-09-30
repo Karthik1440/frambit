@@ -381,7 +381,7 @@ class BookingSerializer(serializers.ModelSerializer):
 
         # 5. Fallback for location & notes
         if not data.get("location"):
-            data["location"] = "Bengaluru, Karnataka"
+            data["location"] = ""
 
         # 6. Pass through phone_number and requirements
         if "phone_number" not in data:

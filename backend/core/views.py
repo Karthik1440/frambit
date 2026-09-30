@@ -374,7 +374,7 @@ class PackageViewSet(viewsets.ModelViewSet):
             user=profile,
             defaults={
                 "display_name": self.request.user.get_full_name() or self.request.user.username or "Creator",
-                "city": profile.city or "Bengaluru",
+                "city": profile.city or "",
                 "hourly_price": Decimal("799.00"),
             },
         )
@@ -621,7 +621,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             )
             shooter, _ = ShooterProfile.objects.get_or_create(
                 user=default_prof,
-                defaults={"display_name": "Frambit Creator", "city": "Bengaluru", "category": "reel_shooter", "hourly_price": Decimal("2500.00")}
+                defaults={"display_name": "Frambit Creator", "city": "", "category": "reel_shooter", "hourly_price": Decimal("2500.00")}
             )
         data["shooter"] = shooter.id
 
@@ -902,7 +902,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
                 booking_date=datetime.date.today(),
                 start_time=datetime.time(10, 0),
                 duration_minutes=60,
-                location=shooter.city or "Bengaluru, Karnataka",
+                location=shooter.city or "",
                 notes="Completed Shoot",
                 estimated_amount=Decimal("1999.00"),
                 status="completed",

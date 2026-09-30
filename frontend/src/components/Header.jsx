@@ -3,7 +3,7 @@ import { Play, Search, MapPin, Plus, User, Menu, X, Sparkles, Navigation, Loader
 import { useAuth } from '../context/AuthContext';
 import { detectCurrentCity } from '../utils/location';
 
-export default function Header({ currentScreen, onNavigate, currentLocation = 'Bengaluru', onLocationChange, unreadChatCount = 0 }) {
+export default function Header({ currentScreen, onNavigate, currentLocation = '', onLocationChange, unreadChatCount = 0 }) {
   const { userRole, currentUser, userData } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [isDetectingGps, setIsDetectingGps] = useState(false);
@@ -19,8 +19,8 @@ export default function Header({ currentScreen, onNavigate, currentLocation = 'B
     setIsDetectingGps(true);
     const city = await detectCurrentCity();
     setIsDetectingGps(false);
-    if (onLocationChange && city) {
-      onLocationChange(city);
+    if (onLocationChange && city && city.trim()) {
+      onLocationChange(city.trim());
     }
   };
 
@@ -66,7 +66,7 @@ export default function Header({ currentScreen, onNavigate, currentLocation = 'B
                 title="Auto-detected location (Click to refresh)"
               >
                 <MapPin className={`w-4 h-4 text-indigo-600 fill-indigo-100 group-hover:scale-110 transition-transform ${isDetectingGps ? 'animate-bounce' : ''}`} />
-                <span className="max-w-[130px] truncate">{isDetectingGps ? 'Detecting...' : currentLocation}</span>
+                <span className="max-w-[130px] truncate">{isDetectingGps ? 'Detecting...' : (currentLocation || 'Set location')}</span>
               </button>
             </div>
 
@@ -215,7 +215,7 @@ export default function Header({ currentScreen, onNavigate, currentLocation = 'B
               title="Click to detect current location"
             >
               <MapPin className={`w-3 h-3 text-indigo-600 fill-indigo-100 ${isDetectingGps ? 'animate-bounce' : ''}`} />
-              <span className="max-w-[95px] truncate">{isDetectingGps ? 'Detecting...' : currentLocation}</span>
+              <span className="max-w-[95px] truncate">{isDetectingGps ? 'Detecting...' : (currentLocation || 'Set location')}</span>
             </button>
 
             <button

@@ -63,17 +63,17 @@ function MainApp() {
 
   const [currentLocation, setCurrentLocation] = useState(() => {
     try {
-      return localStorage.getItem('frambit_user_city') || 'Bengaluru';
+      return localStorage.getItem('frambit_user_city') || '';
     } catch (e) {
-      return 'Bengaluru';
+      return '';
     }
   });
 
   const handleLocationChange = (newLoc) => {
-    if (newLoc && typeof newLoc === 'string') {
-      setCurrentLocation(newLoc);
+    if (newLoc && typeof newLoc === 'string' && newLoc.trim()) {
+      setCurrentLocation(newLoc.trim());
       try {
-        localStorage.setItem('frambit_user_city', newLoc);
+        localStorage.setItem('frambit_user_city', newLoc.trim());
       } catch (e) {}
     }
   };
@@ -82,14 +82,16 @@ function MainApp() {
   useEffect(() => {
     detectCurrentCity()
       .then((city) => {
-        if (city && typeof city === 'string') {
-          handleLocationChange(city);
+        // city can be null if both GPS and IP detection fail — only update if we got a real value
+        if (city && typeof city === 'string' && city.trim()) {
+          handleLocationChange(city.trim());
         }
       })
       .catch((err) => {
         console.warn('Auto location detection on startup failed:', err);
       });
   }, []);
+
 
   const handleUpdatePackages = (updatedPackages) => {
     if (userData && userData.email) {
@@ -659,7 +661,7 @@ function MainApp() {
       client_type: 'Client',
       date: slotData.date || '20 Sep 2026',
       time: slotData.time || '4:00 PM - 6:00 PM',
-      location: slotData.location || `${currentLocation}, Karnataka`,
+      location: slotData.location || currentLocation || '',
       phone_number: slotData.phone_number || '',
       requirements: slotData.requirements || '',
       status: 'Pending',
@@ -688,7 +690,7 @@ function MainApp() {
       client_name: userData?.display_name || userData?.name || 'Client',
       client_email: activeEmail,
       client_avatar: userData?.avatar || currentUser?.photoURL || localStorage.getItem('frambit_active_avatar') || undefined,
-      location: slotData.location || `${currentLocation}, Karnataka`,
+      location: slotData.location || currentLocation || '',
       notes: packageTitle,
       phone_number: slotData.phone_number || '',
       requirements: slotData.requirements || '',
